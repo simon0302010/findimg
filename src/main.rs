@@ -3,7 +3,7 @@ use std::{error::Error, io};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Constraint, Layout, Position},
+    layout::{Alignment, Constraint, Layout, Position},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
     widgets::{Block, Paragraph},
@@ -125,6 +125,11 @@ impl App {
             })
             .block(Block::bordered().title("Mode"));
         frame.render_widget(modesel, mode_area);
+
+        let block = Block::bordered()
+            .title("Images")
+            .title_alignment(Alignment::Center);
+        frame.render_widget(block, img_area);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
