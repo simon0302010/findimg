@@ -5,9 +5,8 @@ use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Position},
     style::{Color, Modifier, Style, Stylize},
-    symbols::border,
     text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Paragraph},
 };
 
 #[derive(Debug)]
@@ -19,7 +18,7 @@ pub struct App {
     current_element: CurrentElement,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum CurrentElement {
     Search,
     Filter,
@@ -53,17 +52,36 @@ impl App {
         ]);
         let [help_area, input_area, img_area] = vertical.areas(frame.area());
 
+        let interactive_bar =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let [search_area, mode_area] = interactive_bar.areas(input_area);
+
         let (msg, style) = match self.input_mode {
-            InputMode::Normal => (
-                vec![
-                    "Press ".into(),
-                    "q".bold(),
-                    " to exit, ".into(),
-                    "e".bold(),
-                    " to start editing.".bold(),
-                ],
-                Style::default().add_modifier(Modifier::RAPID_BLINK),
-            ),
+            InputMode::Normal => {
+                if self.current_element == CurrentElement::Search {
+                    (
+                        vec![
+                            "Press ".into(),
+                            "q".bold(),
+                            " to exit, ".into(),
+                            "e".bold(),
+                            " to start editing".into(),
+                        ],
+                        Style::default().add_modifier(Modifier::RAPID_BLINK),
+                    )
+                } else {
+                    (
+                        vec![
+                            "Press ".into(),
+                            "q".bold(),
+                            " to exit, ".into(),
+                            "Enter".bold(),
+                            " to select mode".into(),
+                        ],
+                        Style::default(),
+                    )
+                }
+            }
             InputMode::Editing => (
                 vec![
                     "Press ".into(),
@@ -81,18 +99,32 @@ impl App {
 
         let input = Paragraph::new(self.search.as_str())
             .style(match self.input_mode {
-                InputMode::Normal => Style::default(),
+                InputMode::Normal => {
+                    if self.current_element == CurrentElement::Search {
+                        Style::default().fg(Color::Rgb(255, 165, 0))
+                    } else {
+                        Style::default()
+                    }
+                }
                 InputMode::Editing => Style::default().fg(Color::Yellow),
             })
             .block(Block::bordered().title("Search"));
-        frame.render_widget(input, input_area);
+        frame.render_widget(input, search_area);
         match self.input_mode {
             InputMode::Normal => {}
             InputMode::Editing => frame.set_cursor_position(Position::new(
-                input_area.x + self.char_index as u16 + 1,
-                input_area.y + 1,
+                search_area.x + self.char_index as u16 + 1,
+                search_area.y + 1,
             )),
         }
+
+        let modesel = Paragraph::new("Placeholder for button")
+            .style(match self.current_element {
+                CurrentElement::Filter => Style::default().fg(Color::Rgb(255, 165, 0)),
+                CurrentElement::Search => Style::default(),
+            })
+            .block(Block::bordered().title("Mode"));
+        frame.render_widget(modesel, mode_area);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -104,10 +136,20 @@ impl App {
             match self.input_mode {
                 InputMode::Normal => match key.code {
                     KeyCode::Char('e') => {
-                        self.input_mode = InputMode::Editing;
+                        if self.current_element == CurrentElement::Search {
+                            self.input_mode = InputMode::Editing;
+                        }
                     }
                     KeyCode::Char('q') => {
                         self.exit();
+                    }
+                    KeyCode::Right => {
+                        // filters are on the right
+                        self.current_element = CurrentElement::Filter;
+                    }
+                    KeyCode::Left => {
+                        // search is on the left
+                        self.current_element = CurrentElement::Search;
                     }
                     _ => {}
                 },
@@ -115,6 +157,7 @@ impl App {
                     KeyCode::Enter => self.search(),
                     KeyCode::Char(to_insert) => self.enter_char(to_insert),
                     KeyCode::Backspace => self.delete_char(),
+                    KeyCode::Delete => self.delete_right(),
                     KeyCode::Left => self.move_cursor_left(),
                     KeyCode::Right => self.move_cursor_right(),
                     KeyCode::Esc => self.input_mode = InputMode::Normal,
@@ -170,6 +213,13 @@ impl App {
         }
     }
 
+    // prob better way to do this
+    fn delete_right(&mut self) {
+        if self.char_index < self.search.len() {
+            self.search.remove(self.char_index);
+        }
+    }
+
     fn reset_cursor(&mut self) {
         self.char_index = 0;
     }
@@ -177,19 +227,6 @@ impl App {
     fn search(&mut self) {
         self.search.clear();
         self.reset_cursor();
-    }
-}
-
-impl Widget for &App {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
-        let title = Line::from("Findimg".bold());
-        let instructions = Line::from(vec![" Quit ".into(), "<Q> ".blue().bold()]);
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(instructions.centered())
-            .border_set(border::THICK);
-
-        block.render(area, buf);
     }
 }
 
