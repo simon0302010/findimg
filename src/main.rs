@@ -52,7 +52,7 @@ enum InputMode {
     Editing,
 }
 
-const SEARCH_RESULTS: u64 = 20;
+const SEARCH_RESULTS: usize = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
     rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
@@ -369,7 +369,11 @@ impl App {
 
         embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        embed_rank.iter().map(|(s, _)| s.clone()).collect()
+        embed_rank
+            .iter()
+            .map(|(s, _)| s.clone())
+            .take(SEARCH_RESULTS)
+            .collect()
     }
 
     fn clear_search(&mut self) {
