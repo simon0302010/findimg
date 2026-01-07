@@ -62,7 +62,7 @@ struct SearchResult {
 const SEARCH_RESULTS: usize = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
+    rust_init("clip-vit-large-patch14_ggml-model-q4_0.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
