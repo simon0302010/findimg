@@ -1,6 +1,6 @@
 mod ui;
 
-use clipers::{rust_embed_image, rust_embed_text, rust_end, rust_init};
+use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
 use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use std::{error::Error, fs, io};
 
@@ -55,7 +55,7 @@ enum InputMode {
 const SEARCH_RESULTS: u64 = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
+    rust_init("clip-vit-large-patch14_ggml-model-f16.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
@@ -359,7 +359,15 @@ impl App {
     fn search(&mut self) -> Vec<String> {
         let text_embeding = rust_embed_text(self.search.clone()).unwrap();
 
-        vec![]
+        let mut embed_rank: Vec<(String, f32)> = vec![];
+        for embedding in &self.images_embedding {
+            let score = rust_embed_compare(&text_embeding, &embedding.1);
+            embed_rank.push((embedding.0.clone(), score));
+        }
+
+        embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        embed_rank.iter().map(|(s, _)| s.clone()).collect()
     }
 
     fn clear_search(&mut self) {
