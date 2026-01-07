@@ -1,3 +1,5 @@
+mod button;
+
 use std::{error::Error, io};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -9,6 +11,8 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
+use crate::button::{BLUE, Button, State};
+
 #[derive(Debug)]
 pub struct App {
     search: String,
@@ -16,6 +20,7 @@ pub struct App {
     char_index: usize,
     exit: bool,
     current_element: CurrentElement,
+    button_pressed: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -44,7 +49,7 @@ impl App {
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let vertical = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(3),
@@ -101,12 +106,12 @@ impl App {
             .style(match self.input_mode {
                 InputMode::Normal => {
                     if self.current_element == CurrentElement::Search {
-                        Style::default().fg(Color::Rgb(255, 165, 0))
+                        Style::default().fg(BLUE.highlight)
                     } else {
-                        Style::default()
+                        Style::default().fg(BLUE.background)
                     }
                 }
-                InputMode::Editing => Style::default().fg(Color::Yellow),
+                InputMode::Editing => Style::default().fg(Color::LightCyan),
             })
             .block(Block::bordered().title("Search"));
         frame.render_widget(input, search_area);
@@ -118,13 +123,18 @@ impl App {
             )),
         }
 
-        let modesel = Paragraph::new("Placeholder for button")
-            .style(match self.current_element {
-                CurrentElement::Filter => Style::default().fg(Color::Rgb(255, 165, 0)),
-                CurrentElement::Search => Style::default(),
-            })
-            .block(Block::bordered().title("Mode"));
-        frame.render_widget(modesel, mode_area);
+        let button_state = if self.current_element == CurrentElement::Filter {
+            if self.button_pressed {
+                State::Active
+            } else {
+                State::Selected
+            }
+        } else {
+            State::Normal
+        };
+        self.button_pressed = false;
+        let mode_selector = Button::new("Choose Mode").state(button_state).theme(BLUE);
+        frame.render_widget(mode_selector, mode_area);
 
         let block = Block::bordered()
             .title("Images")
@@ -155,6 +165,11 @@ impl App {
                     KeyCode::Left => {
                         // search is on the left
                         self.current_element = CurrentElement::Search;
+                    }
+                    KeyCode::Enter => {
+                        if self.current_element == CurrentElement::Filter {
+                            self.button_pressed = true;
+                        }
                     }
                     _ => {}
                 },
@@ -243,6 +258,7 @@ impl Default for App {
             input_mode: InputMode::Normal,
             char_index: 0,
             current_element: CurrentElement::Search,
+            button_pressed: false,
         }
     }
 }
