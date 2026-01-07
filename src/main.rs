@@ -51,7 +51,7 @@ enum InputMode {
 const SEARCH_RESULTS: u64 = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    rust_init("clip-vit-large-patch14_ggml-model-f16.gguf");
+    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
@@ -330,6 +330,9 @@ impl App {
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
     fn search(&mut self) -> Vec<String> {
+        let text_embeding = rust_embed_text(self.search.clone()).unwrap();
+
+            
         vec![]
     }
 

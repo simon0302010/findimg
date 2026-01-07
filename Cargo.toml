@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clipers = { git = "https://github.com/FoxMoss/clippers", version = "0.1.3" }
+clipers = { git = "https://github.com/FoxMoss/clippers", version = "0.1.4" }
 crossterm = "0.29"
 ratatui = "0.30"
 ratatui-image = "10.0"
