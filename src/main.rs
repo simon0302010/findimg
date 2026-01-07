@@ -3,6 +3,8 @@ mod ui;
 use std::{error::Error, fs, io};
 use clipers::{rust_embed_text, rust_embed_image, rust_end, rust_init};
 
+mod img_scrape;
+
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
@@ -11,6 +13,8 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Block, List, ListItem, Paragraph},
 };
+
+use img_scrape::google_photos::scrape;
 
 use crate::ui::{
     button::{BLUE, Button, ButtonState},
