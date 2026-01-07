@@ -1,7 +1,8 @@
 mod ui;
 
+use clipers::{rust_embed_image, rust_end, rust_init};
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use std::{error::Error, fs, io};
-use clipers::{rust_embed_text, rust_embed_image, rust_end, rust_init};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -19,7 +20,6 @@ use crate::ui::{
 
 use std::collections::HashMap;
 
-#[derive(Debug)]
 pub struct App {
     search: String,
     input_mode: InputMode,
@@ -30,8 +30,9 @@ pub struct App {
     modesel_open: bool,
     modesel_list: OptionList,
     images_paths: Vec<String>,
-    search_results: Vec<String>,
+    search_results: Vec<StatefulProtocol>,
     images_embedding: HashMap<String, Vec<f32>>,
+    picker: Picker,
 }
 
 #[derive(Debug, PartialEq)]
@@ -160,7 +161,14 @@ impl App {
         let block = Block::bordered()
             .title("Images")
             .title_alignment(Alignment::Center);
+
+        let img_block = block.inner(img_area);
         frame.render_widget(block, img_area);
+
+        let image = StatefulImage::default();
+        if let Some(img) = self.search_results.first_mut() {
+            frame.render_stateful_widget(image, img_block, img);
+        }
 
         if self.modesel_open {
             let popup_vertical = Layout::vertical([
@@ -255,7 +263,23 @@ impl App {
                     },
                 },
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
-                    KeyCode::Enter => self.search_results = self.search(),
+                    KeyCode::Enter => {
+                        let results = self.search();
+
+                        for img_path in results {
+                            let dyn_img = match image::ImageReader::open(img_path) {
+                                Ok(reader) => reader,
+                                Err(_) => continue,
+                            };
+                            let dyn_img = match dyn_img.decode() {
+                                Ok(img) => img,
+                                Err(_) => continue,
+                            };
+
+                            let image = self.picker.new_resize_protocol(dyn_img);
+                            self.search_results.push(image);
+                        }
+                    }
                     KeyCode::Char(to_insert) => self.enter_char(to_insert),
                     KeyCode::Backspace => self.delete_char(),
                     KeyCode::Delete => self.delete_right(),
@@ -360,22 +384,25 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        let paths = fs::read_dir("images/").unwrap();
+        let paths = fs::create_dir_all("images/")
+            .and_then(|_| fs::read_dir("images/"))
+            .expect("Failed to create or read images directory");
 
         let mut images_paths: Vec<String> = vec![];
         let mut image_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
 
         for path in paths {
-            images_paths.push(path.unwrap().path().display().to_string());
+            if let Ok(entry) = path {
+                images_paths.push(entry.path().display().to_string());
+            }
         }
 
         let mut index: usize = 0;
-        for image in &images_paths{
+        for image in &images_paths {
             index += 1;
             println!("Embedded {}/{}", index, images_paths.len());
             image_embeddings.insert(image.clone(), rust_embed_image(image.clone()).unwrap());
         }
-
 
         Self {
             search: String::new(),
@@ -388,7 +415,8 @@ impl Default for App {
             modesel_list: OptionList::from_iter([(OptionStatus::Checked, "Search")]),
             search_results: Vec::new(),
             images_paths: images_paths,
-            images_embedding: image_embeddings
+            images_embedding: image_embeddings,
+            picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
         }
     }
 }

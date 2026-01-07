@@ -1,7 +1,5 @@
 /target
 clip-vit-large-patch14_ggml-model-q8_0.gguf
-<<<<<<< Updated upstream
 clip-vit-large-patch14_ggml-model-f16.gguf
-=======
 images/
->>>>>>> Stashed changes
+sample*
