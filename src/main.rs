@@ -69,6 +69,8 @@ impl App {
                             "Press ".into(),
                             "q".bold(),
                             " to exit, ".into(),
+                            "c".bold(),
+                            " to clear the search, ".into(),
                             "Enter".bold(),
                             " to start editing".into(),
                         ],
@@ -154,6 +156,9 @@ impl App {
                 InputMode::Normal => match key.code {
                     KeyCode::Char('q') => {
                         self.exit();
+                    }
+                    KeyCode::Char('c') => {
+                        self.clear_search();
                     }
                     KeyCode::Right => {
                         // filters are on the right
@@ -243,7 +248,9 @@ impl App {
         self.char_index = 0;
     }
 
-    fn search(&mut self) {
+    fn search(&mut self) {}
+
+    fn clear_search(&mut self) {
         self.search.clear();
         self.reset_cursor();
     }
