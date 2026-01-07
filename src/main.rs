@@ -1,7 +1,9 @@
 mod ui;
 
 use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
-use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::{
+    ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
+};
 use std::{error::Error, fs, io};
 
 mod img_scrape;
@@ -34,7 +36,7 @@ pub struct App {
     modesel_open: bool,
     modesel_list: OptionList,
     images_paths: Vec<String>,
-    search_results: Vec<StatefulProtocol>,
+    search_results: Vec<SearchResult>,
     images_embedding: HashMap<String, Vec<f32>>,
     picker: Picker,
 }
@@ -50,6 +52,11 @@ enum CurrentElement {
 enum InputMode {
     Normal,
     Editing,
+}
+
+struct SearchResult {
+    image: StatefulProtocol,
+    confidence: f64,
 }
 
 const SEARCH_RESULTS: usize = 20;
@@ -171,7 +178,35 @@ impl App {
 
         let image = StatefulImage::default();
         if let Some(img) = self.search_results.first_mut() {
-            frame.render_stateful_widget(image, img_block, img);
+            img.image
+                .resize_encode(&ratatui_image::Resize::Fit(None), img_block);
+
+            let img_dimensions = (
+                img.image
+                    .size_for(ratatui_image::Resize::Fit(None), img_block)
+                    .width,
+                img.image
+                    .size_for(ratatui_image::Resize::Fit(None), img_block)
+                    .height,
+            );
+
+            let this_img_block = Block::bordered()
+                .title(format!("Confidence: {}", img.confidence))
+                .title_alignment(Alignment::Center);
+
+            let img_height = img_dimensions.1 as u16;
+            let img_width = img_dimensions.0 as u16;
+
+            let constrained_area = ratatui::layout::Rect {
+                x: img_block.x,
+                y: img_block.y,
+                width: img_width.min(img_block.width),
+                height: img_height.min(img_block.height),
+            };
+
+            let this_img_area = this_img_block.inner(constrained_area);
+            frame.render_widget(this_img_block, constrained_area);
+            frame.render_stateful_widget(image, this_img_area, &mut img.image);
         }
 
         if self.modesel_open {
@@ -268,21 +303,7 @@ impl App {
                 },
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
                     KeyCode::Enter => {
-                        let results = self.search();
-
-                        for img_path in results {
-                            let dyn_img = match image::ImageReader::open(img_path) {
-                                Ok(reader) => reader,
-                                Err(_) => continue,
-                            };
-                            let dyn_img = match dyn_img.decode() {
-                                Ok(img) => img,
-                                Err(_) => continue,
-                            };
-
-                            let image = self.picker.new_resize_protocol(dyn_img);
-                            self.search_results.push(image);
-                        }
+                        self.search_results = self.search();
                     }
                     KeyCode::Char(to_insert) => self.enter_char(to_insert),
                     KeyCode::Backspace => self.delete_char(),
@@ -356,7 +377,7 @@ impl App {
     // gets called whenever enter is pressed.
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
-    fn search(&mut self) -> Vec<String> {
+    fn search(&mut self) -> Vec<SearchResult> {
         self.search_results.clear();
 
         let text_embeding = rust_embed_text(self.search.clone()).unwrap();
@@ -369,11 +390,25 @@ impl App {
 
         embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        embed_rank
-            .iter()
-            .map(|(s, _)| s.clone())
-            .take(SEARCH_RESULTS)
-            .collect()
+        let mut results: Vec<SearchResult> = Vec::new();
+        for (path, confidence) in embed_rank {
+            let dyn_img = match image::ImageReader::open(path) {
+                Ok(reader) => reader,
+                Err(_) => continue,
+            };
+            let dyn_img = match dyn_img.decode() {
+                Ok(img) => img,
+                Err(_) => continue,
+            };
+
+            let image = self.picker.new_resize_protocol(dyn_img);
+            results.push(SearchResult {
+                image,
+                confidence: confidence as f64,
+            });
+        }
+
+        results
     }
 
     fn clear_search(&mut self) {
