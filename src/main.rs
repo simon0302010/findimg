@@ -1,8 +1,8 @@
 mod button;
 mod list;
 
-use std::{error::Error, io};
 use clipers::{rust_embed_text, rust_end, rust_init};
+use std::{error::Error, io};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     button::{BLUE, Button, State},
-    list::{TodoList, TodoStatus, alternate_colors},
+    list::{OptionList, OptionStatus, alternate_colors},
 };
 
 #[derive(Debug)]
@@ -27,9 +27,9 @@ pub struct App {
     current_element: CurrentElement,
     button_pressed: bool,
     modesel_open: bool,
-    modesel_list: TodoList,
-
+    modesel_list: OptionList,
     images_paths: Vec<String>,
+    search_results: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -45,8 +45,10 @@ enum InputMode {
     Editing,
 }
 
+const SEARCH_RESULTS: u64 = 20;
+
 fn main() -> Result<(), Box<dyn Error>> {
-    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
+    rust_init("clip-vit-large-patch14_ggml-model-f16.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
@@ -230,6 +232,7 @@ impl App {
                             self.button_pressed = true;
                             self.modesel_open = !self.modesel_open;
                             self.current_element = CurrentElement::Modesel;
+                            self.modesel_list.state.select(Some(0));
                         }
                         _ => {}
                     },
@@ -250,7 +253,7 @@ impl App {
                     },
                 },
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
-                    KeyCode::Enter => self.search(),
+                    KeyCode::Enter => self.search_results = self.search(),
                     KeyCode::Char(to_insert) => self.enter_char(to_insert),
                     KeyCode::Backspace => self.delete_char(),
                     KeyCode::Delete => self.delete_right(),
@@ -320,7 +323,12 @@ impl App {
         self.char_index = 0;
     }
 
-    fn search(&mut self) {}
+    // gets called whenever enter is pressed.
+    // is supposed to return an array of all matching image paths from best match to worst.
+    // returns as many results as SEARCH_RESULTS specifies.
+    fn search(&mut self) -> Vec<String> {
+        vec![]
+    }
 
     fn clear_search(&mut self) {
         self.search.clear();
@@ -337,12 +345,12 @@ impl App {
 
     fn toggle_status(&mut self) {
         for item in &mut self.modesel_list.items {
-            item.status = TodoStatus::Todo;
+            item.status = OptionStatus::Unchecked;
         }
         if let Some(i) = self.modesel_list.state.selected() {
             self.modesel_list.items[i].status = match self.modesel_list.items[i].status {
-                TodoStatus::Completed => TodoStatus::Todo,
-                TodoStatus::Todo => TodoStatus::Completed,
+                OptionStatus::Checked => OptionStatus::Unchecked,
+                OptionStatus::Unchecked => OptionStatus::Checked,
             }
         }
     }
@@ -358,12 +366,9 @@ impl Default for App {
             current_element: CurrentElement::Search,
             button_pressed: false,
             modesel_open: false,
-            modesel_list: TodoList::from_iter([
-                (TodoStatus::Todo, "Normal", "Text"),
-                (TodoStatus::Todo, "Fast", "Text"),
-            ]),
-
-           images_paths: vec![]
+            modesel_list: OptionList::from_iter([(OptionStatus::Checked, "Search")]),
+            images_paths: Vec::new(),
+            search_results: Vec::new(),
         }
     }
 }
