@@ -451,7 +451,13 @@ impl App {
             embed_rank.push((embedding.0.clone(), score));
         }
 
-        embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        if self.modesel_list.items[self.modesel_list.state.selected().unwrap_or(0)].status
+            == OptionStatus::Checked
+        {
+            embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        } else {
+            embed_rank.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        }
 
         let mut results: Vec<SearchResult> = Vec::new();
         for (path, confidence) in embed_rank.iter().take(SEARCH_RESULTS) {
@@ -531,7 +537,10 @@ impl Default for App {
             current_element: CurrentElement::Search,
             button_pressed: false,
             modesel_open: false,
-            modesel_list: OptionList::from_iter([(OptionStatus::Checked, "Search")]),
+            modesel_list: OptionList::from_iter([
+                (OptionStatus::Checked, "Search"),
+                (OptionStatus::Unchecked, "Negative Prompt"),
+            ]),
             search_results: Vec::new(),
             images_embedding: image_embeddings,
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
