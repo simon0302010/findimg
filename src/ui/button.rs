@@ -15,12 +15,12 @@ use ratatui::{
 pub struct Button<'a> {
     label: Line<'a>,
     theme: Theme,
-    state: State,
+    state: ButtonState,
     padding: (u16, u16, u16, u16),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum State {
+pub enum ButtonState {
     Normal,
     Selected,
     Active,
@@ -61,7 +61,7 @@ impl<'a> Button<'a> {
         Button {
             label: label.into(),
             theme: BLUE,
-            state: State::Normal,
+            state: ButtonState::Normal,
             padding: (0, 0, 0, 0),
         }
     }
@@ -71,7 +71,7 @@ impl<'a> Button<'a> {
         self
     }
 
-    pub const fn state(mut self, state: State) -> Self {
+    pub const fn state(mut self, state: ButtonState) -> Self {
         self.state = state;
         self
     }
@@ -131,9 +131,9 @@ impl Button<'_> {
     const fn colors(&self) -> (Color, Color, Color, Color) {
         let theme = self.theme;
         match self.state {
-            State::Normal => (theme.background, theme.text, theme.shadow, theme.highlight),
-            State::Selected => (theme.highlight, theme.text, theme.shadow, theme.highlight),
-            State::Active => (theme.background, theme.text, theme.highlight, theme.shadow),
+            ButtonState::Normal => (theme.background, theme.text, theme.shadow, theme.highlight),
+            ButtonState::Selected => (theme.highlight, theme.text, theme.shadow, theme.highlight),
+            ButtonState::Active => (theme.background, theme.text, theme.highlight, theme.shadow),
         }
     }
 }
