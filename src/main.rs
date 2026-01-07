@@ -1,5 +1,4 @@
-mod button;
-mod list;
+mod ui;
 
 use clipers::{rust_embed_text, rust_end, rust_init};
 use std::{error::Error, io};
@@ -13,8 +12,8 @@ use ratatui::{
     widgets::{Block, List, ListItem, Paragraph},
 };
 
-use crate::{
-    button::{BLUE, Button, State},
+use crate::ui::{
+    button::{BLUE, Button, ButtonState},
     list::{OptionList, OptionStatus, alternate_colors},
 };
 
@@ -143,12 +142,12 @@ impl App {
 
         let button_state = if self.current_element == CurrentElement::Filter {
             if self.button_pressed {
-                State::Active
+                ButtonState::Active
             } else {
-                State::Selected
+                ButtonState::Selected
             }
         } else {
-            State::Normal
+            ButtonState::Normal
         };
         self.button_pressed = false;
         let mode_selector = Button::new("Choose Mode").state(button_state).theme(BLUE);
