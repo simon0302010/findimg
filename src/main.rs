@@ -1,10 +1,11 @@
+use std::io::Read;
 mod ui;
-
+use serde::{Serialize, Deserialize};
 use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
-use std::{error::Error, fs, io, path::PathBuf, process::exit};
+use std::{error::Error, fs::{self, File}, io::{self, Write}, path::PathBuf, process::exit};
 
 mod img_scrape;
 
@@ -501,6 +502,13 @@ impl App {
     }
 }
 
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Embedding {
+    path: String,
+    vector: Vec<f32>
+}
+
 impl Default for App {
     fn default() -> Self {
         let paths = fs::create_dir_all("images/")
@@ -519,9 +527,32 @@ impl Default for App {
         let mut index: usize = 0;
         for image in &images_paths {
             index += 1;
-            println!("Embedded {}/{}", index, images_paths.len());
-            image_embeddings.insert(image.clone(), rust_embed_image(image.clone()).unwrap());
+            if image.ends_with(".embed") {
+                continue;
+            }
+            println!("Embedded {}/{} {}", index, images_paths.len(), image);
+            if fs::exists(image.clone() + ".embed").unwrap() {
+                let mut output = File::open(image.clone() + ".embed").unwrap();
+
+                let mut seralized_buffer = Vec::new();
+                output.read_to_end(&mut seralized_buffer).unwrap();
+
+                let deserialized: Embedding  = serde_json::from_slice(&seralized_buffer.as_slice()).unwrap();
+
+                image_embeddings.insert(deserialized.path, deserialized.vector);
+                continue;
+            }
+
+            let embedding = rust_embed_image(image.clone()).unwrap();
+            image_embeddings.insert(image.clone(), embedding.clone());
+            let to_seralize = Embedding {path: image.clone(), vector: embedding};
+
+            let buffer = serde_json::to_string(&to_seralize).unwrap();
+
+            let mut output = File::create(image.clone() + ".embed").unwrap();
+            output.write(buffer.as_bytes()).unwrap();
         }
+
 
         Self {
             search: String::new(),
