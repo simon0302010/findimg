@@ -21,7 +21,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Position},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, List, ListItem, Paragraph},
+    widgets::{Block, Clear, List, ListItem, Paragraph},
 };
 
 use img_scrape::google_photos::scrape;
@@ -317,6 +317,8 @@ impl App {
                 })
                 .collect();
 
+            frame.render_widget(Clear, middle);
+
             let list = List::new(items)
                 .block(popup_block)
                 .highlight_style(Style::new().bg(BLUE.highlight).add_modifier(Modifier::BOLD))
@@ -458,8 +460,12 @@ impl App {
             embed_rank.push((embedding.0.clone(), score));
         }
 
-        if self.modesel_list.items[self.modesel_list.state.selected().unwrap_or(0)].status
-            == OptionStatus::Checked
+        if self
+            .modesel_list
+            .items
+            .iter()
+            .find(|e| e.option == "Search".to_string())
+            .is_some_and(|e| e.status == OptionStatus::Checked)
         {
             embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         } else {
