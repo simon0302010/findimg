@@ -1,8 +1,8 @@
 mod button;
 mod list;
 
-use clipers::{rust_embed_text, rust_end, rust_init};
-use std::{error::Error, io};
+use std::{error::Error, fs, io};
+use clipers::{rust_embed_text, rust_embed_image, rust_end, rust_init};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -18,6 +18,8 @@ use crate::{
     list::{OptionList, OptionStatus, alternate_colors},
 };
 
+use std::collections::HashMap;
+
 #[derive(Debug)]
 pub struct App {
     search: String,
@@ -30,6 +32,7 @@ pub struct App {
     modesel_list: OptionList,
     images_paths: Vec<String>,
     search_results: Vec<String>,
+    images_embedding: HashMap<String, Vec<f32>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -358,6 +361,23 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
+        let paths = fs::read_dir("images/").unwrap();
+
+        let mut images_paths: Vec<String> = vec![];
+        let mut image_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
+
+        for path in paths {
+            images_paths.push(path.unwrap().path().display().to_string());
+        }
+
+        let mut index: usize = 0;
+        for image in &images_paths{
+            index += 1;
+            println!("Embedded {}/{}", index, images_paths.len());
+            image_embeddings.insert(image.clone(), rust_embed_image(image.clone()).unwrap());
+        }
+
+
         Self {
             search: String::new(),
             exit: false,
@@ -367,8 +387,9 @@ impl Default for App {
             button_pressed: false,
             modesel_open: false,
             modesel_list: OptionList::from_iter([(OptionStatus::Checked, "Search")]),
-            images_paths: Vec::new(),
             search_results: Vec::new(),
+            images_paths: images_paths,
+            images_embedding: image_embeddings
         }
     }
 }
