@@ -2,6 +2,7 @@ mod button;
 mod list;
 
 use std::{error::Error, io};
+use clipers::{rust_embed_text, rust_end, rust_init};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -27,6 +28,8 @@ pub struct App {
     button_pressed: bool,
     modesel_open: bool,
     modesel_list: TodoList,
+
+    images_paths: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,7 +46,9 @@ enum InputMode {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
+    rust_end();
     Ok(())
 }
 
@@ -357,6 +362,8 @@ impl Default for App {
                 (TodoStatus::Todo, "Normal", "Text"),
                 (TodoStatus::Todo, "Fast", "Text"),
             ]),
+
+           images_paths: vec![]
         }
     }
 }
