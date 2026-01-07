@@ -69,7 +69,7 @@ impl App {
                             "Press ".into(),
                             "q".bold(),
                             " to exit, ".into(),
-                            "e".bold(),
+                            "Enter".bold(),
                             " to start editing".into(),
                         ],
                         Style::default().add_modifier(Modifier::RAPID_BLINK),
@@ -143,18 +143,15 @@ impl App {
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
-        if let Event::Key(mut key) = event::read()? {
+        if let Ok(true) = event::poll(std::time::Duration::from_millis(200))
+            && let Event::Key(mut key) = event::read()?
+        {
             if let KeyCode::Char(c) = key.code {
                 key.code = KeyCode::Char(c.to_lowercase().collect::<Vec<char>>()[0])
             }
 
             match self.input_mode {
                 InputMode::Normal => match key.code {
-                    KeyCode::Char('e') => {
-                        if self.current_element == CurrentElement::Search {
-                            self.input_mode = InputMode::Editing;
-                        }
-                    }
                     KeyCode::Char('q') => {
                         self.exit();
                     }
@@ -169,6 +166,8 @@ impl App {
                     KeyCode::Enter => {
                         if self.current_element == CurrentElement::Filter {
                             self.button_pressed = true;
+                        } else {
+                            self.input_mode = InputMode::Editing
                         }
                     }
                     _ => {}
