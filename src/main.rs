@@ -1,7 +1,7 @@
 mod ui;
 
 use std::{error::Error, fs, io};
-use clipers::{rust_embed_text, rust_embed_image, rust_end, rust_init};
+use clipers::{rust_embed_text, rust_embed_image, rust_end, rust_init, rust_embed_compare};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -331,8 +331,17 @@ impl App {
     fn search(&mut self) -> Vec<String> {
         let text_embeding = rust_embed_text(self.search.clone()).unwrap();
 
-            
-        vec![]
+        let mut embed_rank: Vec<(String, f32)> = vec![];
+        for embedding in &self.images_embedding {
+            let score = rust_embed_compare(&text_embeding, &embedding.1);
+            embed_rank.push((embedding.0.clone(), score));
+        }
+
+        embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        println!("ranking {:?}", embed_rank);
+
+        embed_rank.iter().map(|(s, _)| s.clone()).collect()
     }
 
     fn clear_search(&mut self) {
