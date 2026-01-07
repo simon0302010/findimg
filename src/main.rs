@@ -1,4 +1,5 @@
 mod button;
+mod list;
 
 use std::{error::Error, io};
 
@@ -8,10 +9,13 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Position},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, Paragraph},
+    widgets::{Block, List, ListItem, Paragraph},
 };
 
-use crate::button::{BLUE, Button, State};
+use crate::{
+    button::{BLUE, Button, State},
+    list::{TodoList, TodoStatus, alternate_colors},
+};
 
 #[derive(Debug)]
 pub struct App {
@@ -21,12 +25,15 @@ pub struct App {
     exit: bool,
     current_element: CurrentElement,
     button_pressed: bool,
+    modesel_open: bool,
+    modesel_list: TodoList,
 }
 
 #[derive(Debug, PartialEq)]
 enum CurrentElement {
     Search,
     Filter,
+    Modesel,
 }
 
 #[derive(Debug)]
@@ -76,7 +83,7 @@ impl App {
                         ],
                         Style::default().add_modifier(Modifier::RAPID_BLINK),
                     )
-                } else {
+                } else if self.current_element == CurrentElement::Filter {
                     (
                         vec![
                             "Press ".into(),
@@ -87,6 +94,8 @@ impl App {
                         ],
                         Style::default(),
                     )
+                } else {
+                    (vec![], Style::default())
                 }
             }
             InputMode::Editing => (
@@ -127,6 +136,7 @@ impl App {
 
         let button_state = if self.current_element == CurrentElement::Filter {
             if self.button_pressed {
+                self.modesel_open = !self.modesel_open;
                 State::Active
             } else {
                 State::Selected
@@ -138,10 +148,56 @@ impl App {
         let mode_selector = Button::new("Choose Mode").state(button_state).theme(BLUE);
         frame.render_widget(mode_selector, mode_area);
 
+        // images block
         let block = Block::bordered()
             .title("Images")
             .title_alignment(Alignment::Center);
         frame.render_widget(block, img_area);
+
+        if self.modesel_open {
+            let popup_vertical = Layout::vertical([
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]);
+
+            let [_, middle_vertical, _] = popup_vertical.areas(frame.area());
+
+            let popup_horizontal = Layout::horizontal([
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]);
+
+            let [_, middle, _] = popup_horizontal.areas(middle_vertical);
+
+            let popup_block = Block::bordered()
+                .title("Select Mode")
+                .title_alignment(Alignment::Center);
+
+            /*let block_area = popup_block.inner(middle);
+
+            frame.render_widget(popup_block, middle);*/
+
+            let items: Vec<ListItem> = self
+                .modesel_list
+                .items
+                .iter()
+                .enumerate()
+                .map(|(i, todo_item)| {
+                    let color = alternate_colors(i);
+                    ListItem::from(todo_item).bg(color)
+                })
+                .collect();
+
+            let list = List::new(items)
+                .block(popup_block)
+                .highlight_style(Style::new().bg(BLUE.highlight).add_modifier(Modifier::BOLD))
+                .highlight_symbol(">")
+                .highlight_spacing(ratatui::widgets::HighlightSpacing::Always);
+
+            frame.render_stateful_widget(list, middle, &mut self.modesel_list.state);
+        }
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -154,25 +210,17 @@ impl App {
 
             match self.input_mode {
                 InputMode::Normal => match key.code {
-                    KeyCode::Char('q') => {
-                        self.exit();
-                    }
-                    KeyCode::Char('c') => {
-                        self.clear_search();
-                    }
-                    KeyCode::Right => {
-                        // filters are on the right
-                        self.current_element = CurrentElement::Filter;
-                    }
-                    KeyCode::Left => {
-                        // search is on the left
-                        self.current_element = CurrentElement::Search;
-                    }
+                    KeyCode::Char('q') => self.exit(),
+                    KeyCode::Char('c') => self.clear_search(),
+                    KeyCode::Right => self.current_element = CurrentElement::Filter,
+                    KeyCode::Left => self.current_element = CurrentElement::Search,
                     KeyCode::Enter => {
                         if self.current_element == CurrentElement::Filter {
                             self.button_pressed = true;
-                        } else {
-                            self.input_mode = InputMode::Editing
+                        } else if self.current_element == CurrentElement::Search {
+                            self.input_mode = InputMode::Editing;
+                        } else if self.current_element == CurrentElement::Modesel {
+                            todo!();
                         }
                     }
                     _ => {}
@@ -265,6 +313,11 @@ impl Default for App {
             char_index: 0,
             current_element: CurrentElement::Search,
             button_pressed: false,
+            modesel_open: false,
+            modesel_list: TodoList::from_iter([
+                (TodoStatus::Todo, "Normal", "Text"),
+                (TodoStatus::Todo, "Fast", "Text"),
+            ]),
         }
     }
 }
