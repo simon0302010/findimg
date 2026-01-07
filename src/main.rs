@@ -1,11 +1,17 @@
 use std::io::Read;
 mod ui;
-use serde::{Serialize, Deserialize};
 use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
-use std::{error::Error, fs::{self, File}, io::{self, Write}, path::PathBuf, process::exit};
+use serde::{Deserialize, Serialize};
+use std::{
+    error::Error,
+    fs::{self, File},
+    io::{self, Write},
+    path::PathBuf,
+    process::exit,
+};
 
 mod img_scrape;
 
@@ -71,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         exit(1);
     }
 
-    rust_init("clip-vit-large-patch14_ggml-model-q4_0.gguf");
+    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
@@ -508,11 +514,10 @@ impl App {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 struct Embedding {
     path: String,
-    vector: Vec<f32>
+    vector: Vec<f32>,
 }
 
 impl Default for App {
@@ -543,7 +548,8 @@ impl Default for App {
                 let mut seralized_buffer = Vec::new();
                 output.read_to_end(&mut seralized_buffer).unwrap();
 
-                let deserialized: Embedding  = serde_json::from_slice(&seralized_buffer.as_slice()).unwrap();
+                let deserialized: Embedding =
+                    serde_json::from_slice(&seralized_buffer.as_slice()).unwrap();
 
                 image_embeddings.insert(deserialized.path, deserialized.vector);
                 continue;
@@ -551,14 +557,16 @@ impl Default for App {
 
             let embedding = rust_embed_image(image.clone()).unwrap();
             image_embeddings.insert(image.clone(), embedding.clone());
-            let to_seralize = Embedding {path: image.clone(), vector: embedding};
+            let to_seralize = Embedding {
+                path: image.clone(),
+                vector: embedding,
+            };
 
             let buffer = serde_json::to_string(&to_seralize).unwrap();
 
             let mut output = File::create(image.clone() + ".embed").unwrap();
             output.write(buffer.as_bytes()).unwrap();
         }
-
 
         Self {
             search: String::new(),
