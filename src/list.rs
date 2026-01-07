@@ -42,9 +42,9 @@ pub struct TodoList {
 
 #[derive(Debug)]
 pub struct TodoItem {
-    todo: String,
-    info: String,
-    status: TodoStatus,
+    pub todo: String,
+    pub info: String,
+    pub status: TodoStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

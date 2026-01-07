@@ -136,7 +136,6 @@ impl App {
 
         let button_state = if self.current_element == CurrentElement::Filter {
             if self.button_pressed {
-                self.modesel_open = !self.modesel_open;
                 State::Active
             } else {
                 State::Selected
@@ -209,21 +208,41 @@ impl App {
             }
 
             match self.input_mode {
-                InputMode::Normal => match key.code {
-                    KeyCode::Char('q') => self.exit(),
-                    KeyCode::Char('c') => self.clear_search(),
-                    KeyCode::Right => self.current_element = CurrentElement::Filter,
-                    KeyCode::Left => self.current_element = CurrentElement::Search,
-                    KeyCode::Enter => {
-                        if self.current_element == CurrentElement::Filter {
+                InputMode::Normal => match self.current_element {
+                    CurrentElement::Search => match key.code {
+                        KeyCode::Char('c') => self.clear_search(),
+                        KeyCode::Char('q') => self.exit(),
+                        KeyCode::Right => self.current_element = CurrentElement::Filter,
+                        KeyCode::Left => self.current_element = CurrentElement::Search,
+                        KeyCode::Enter => self.input_mode = InputMode::Editing,
+                        _ => {}
+                    },
+                    CurrentElement::Filter => match key.code {
+                        KeyCode::Char('q') => self.exit(),
+                        KeyCode::Right => self.current_element = CurrentElement::Filter,
+                        KeyCode::Left => self.current_element = CurrentElement::Search,
+                        KeyCode::Enter => {
                             self.button_pressed = true;
-                        } else if self.current_element == CurrentElement::Search {
-                            self.input_mode = InputMode::Editing;
-                        } else if self.current_element == CurrentElement::Modesel {
-                            todo!();
+                            self.modesel_open = !self.modesel_open;
+                            self.current_element = CurrentElement::Modesel;
                         }
-                    }
-                    _ => {}
+                        _ => {}
+                    },
+                    CurrentElement::Modesel => match key.code {
+                        KeyCode::Char('q') => {
+                            self.modesel_open = false;
+                            self.current_element = CurrentElement::Filter;
+                        }
+                        KeyCode::Enter => {
+                            self.toggle_status();
+                            self.modesel_open = false;
+                            self.current_element = CurrentElement::Filter;
+                        }
+                        KeyCode::Char(' ') => self.toggle_status(),
+                        KeyCode::Down => self.select_next(),
+                        KeyCode::Up => self.select_previous(),
+                        _ => {}
+                    },
                 },
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
                     KeyCode::Enter => self.search(),
@@ -301,6 +320,26 @@ impl App {
     fn clear_search(&mut self) {
         self.search.clear();
         self.reset_cursor();
+    }
+
+    fn select_next(&mut self) {
+        self.modesel_list.state.select_next();
+    }
+
+    fn select_previous(&mut self) {
+        self.modesel_list.state.select_previous();
+    }
+
+    fn toggle_status(&mut self) {
+        for item in &mut self.modesel_list.items {
+            item.status = TodoStatus::Todo;
+        }
+        if let Some(i) = self.modesel_list.state.selected() {
+            self.modesel_list.items[i].status = match self.modesel_list.items[i].status {
+                TodoStatus::Completed => TodoStatus::Todo,
+                TodoStatus::Todo => TodoStatus::Completed,
+            }
+        }
     }
 }
 
