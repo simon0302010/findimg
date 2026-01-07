@@ -4,7 +4,7 @@ use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, r
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
-use std::{error::Error, fs, io};
+use std::{error::Error, fs, io, path::PathBuf, process::exit};
 
 mod img_scrape;
 
@@ -35,7 +35,6 @@ pub struct App {
     button_pressed: bool,
     modesel_open: bool,
     modesel_list: OptionList,
-    images_paths: Vec<String>,
     search_results: Vec<SearchResult>,
     images_embedding: HashMap<String, Vec<f32>>,
     picker: Picker,
@@ -57,11 +56,20 @@ enum InputMode {
 struct SearchResult {
     image: StatefulProtocol,
     confidence: f64,
+    last_area: Option<ratatui::layout::Rect>,
 }
 
 const SEARCH_RESULTS: usize = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = std::env::args().collect::<Vec<String>>();
+    if args.len() > 1
+        && let Err(e) = scrape(PathBuf::from("images/"), args[1].as_str())
+    {
+        println!("Failed to download images: {}", e);
+        exit(1);
+    }
+
     rust_init("clip-vit-large-patch14_ggml-model-q4_0.gguf");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
@@ -176,37 +184,94 @@ impl App {
         let img_block = block.inner(img_area);
         frame.render_widget(block, img_area);
 
-        let image = StatefulImage::default();
-        if let Some(img) = self.search_results.first_mut() {
-            img.image
-                .resize_encode(&ratatui_image::Resize::Fit(None), img_block);
+        let results_count = self.search_results.len().min(10);
+        if results_count > 0 {
+            let mut areas = Vec::with_capacity(results_count);
 
-            let img_dimensions = (
-                img.image
-                    .size_for(ratatui_image::Resize::Fit(None), img_block)
-                    .width,
-                img.image
-                    .size_for(ratatui_image::Resize::Fit(None), img_block)
-                    .height,
-            );
+            if results_count == 1 {
+                areas.push(img_block);
+            } else {
+                let main_split =
+                    Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .split(img_block);
 
-            let this_img_block = Block::bordered()
-                .title(format!("Confidence: {}", img.confidence))
-                .title_alignment(Alignment::Center);
+                areas.push(main_split[0]);
 
-            let img_height = img_dimensions.1 as u16;
-            let img_width = img_dimensions.0 as u16;
+                let right_area = main_split[1];
+                let remaining = results_count - 1;
 
-            let constrained_area = ratatui::layout::Rect {
-                x: img_block.x,
-                y: img_block.y,
-                width: img_width.min(img_block.width),
-                height: img_height.min(img_block.height),
-            };
+                let r_constraints = if remaining <= 2 {
+                    vec![Constraint::Percentage(100)]
+                } else if remaining <= 5 {
+                    vec![Constraint::Percentage(50), Constraint::Percentage(50)]
+                } else {
+                    vec![
+                        Constraint::Percentage(33),
+                        Constraint::Percentage(33),
+                        Constraint::Percentage(34),
+                    ]
+                };
 
-            let this_img_area = this_img_block.inner(constrained_area);
-            frame.render_widget(this_img_block, constrained_area);
-            frame.render_stateful_widget(image, this_img_area, &mut img.image);
+                let r_rows = Layout::vertical(r_constraints).split(right_area);
+
+                let mut r_idx = 0;
+
+                if remaining > 0 {
+                    let n = if remaining <= 2 { remaining } else { 2 };
+                    let row_areas = Layout::horizontal(vec![Constraint::Ratio(1, n as u32); n])
+                        .split(r_rows[0]);
+                    areas.extend_from_slice(&row_areas);
+                    r_idx += n;
+                }
+
+                if remaining > r_idx {
+                    let rem = remaining - r_idx;
+                    let limit = if remaining <= 5 { rem } else { 3 };
+                    let n = rem.min(limit);
+
+                    let row_areas = Layout::horizontal(vec![Constraint::Ratio(1, n as u32); n])
+                        .split(r_rows[1]);
+                    areas.extend_from_slice(&row_areas);
+                    r_idx += n;
+                }
+
+                if remaining > r_idx {
+                    let rem = remaining - r_idx;
+                    let row_areas = Layout::horizontal(vec![Constraint::Ratio(1, rem as u32); rem])
+                        .split(r_rows[2]);
+                    areas.extend_from_slice(&row_areas);
+                }
+            }
+
+            for (i, area) in areas.into_iter().enumerate() {
+                if let Some(result) = self.search_results.get_mut(i) {
+                    let confidence_text = format!("{}%", (result.confidence * 100.0) as u64);
+                    let title = if i == 0 {
+                        format!("Best: {}", confidence_text)
+                    } else {
+                        confidence_text
+                    };
+
+                    let cell_block = Block::bordered()
+                        .title(title)
+                        .title_alignment(Alignment::Center);
+
+                    let inner_area = cell_block.inner(area);
+                    frame.render_widget(cell_block, area);
+
+                    if result.last_area != Some(inner_area) {
+                        result
+                            .image
+                            .resize_encode(&ratatui_image::Resize::Fit(None), inner_area);
+                        result.last_area = Some(inner_area);
+                    }
+                    frame.render_stateful_widget(
+                        StatefulImage::default(),
+                        inner_area,
+                        &mut result.image,
+                    );
+                }
+            }
         }
 
         if self.modesel_open {
@@ -256,7 +321,7 @@ impl App {
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
-        if let Ok(true) = event::poll(std::time::Duration::from_millis(200))
+        if let Ok(true) = event::poll(std::time::Duration::from_millis(1000))
             && let Event::Key(mut key) = event::read()?
         {
             if let KeyCode::Char(c) = key.code {
@@ -378,8 +443,6 @@ impl App {
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
     fn search(&mut self) -> Vec<SearchResult> {
-        self.search_results.clear();
-
         let text_embeding = rust_embed_text(self.search.clone()).unwrap();
 
         let mut embed_rank: Vec<(String, f32)> = vec![];
@@ -391,7 +454,7 @@ impl App {
         embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
         let mut results: Vec<SearchResult> = Vec::new();
-        for (path, confidence) in embed_rank {
+        for (path, confidence) in embed_rank.iter().take(SEARCH_RESULTS) {
             let dyn_img = match image::ImageReader::open(path) {
                 Ok(reader) => reader,
                 Err(_) => continue,
@@ -404,7 +467,8 @@ impl App {
             let image = self.picker.new_resize_protocol(dyn_img);
             results.push(SearchResult {
                 image,
-                confidence: confidence as f64,
+                confidence: *confidence as f64,
+                last_area: None,
             });
         }
 
@@ -469,7 +533,6 @@ impl Default for App {
             modesel_open: false,
             modesel_list: OptionList::from_iter([(OptionStatus::Checked, "Search")]),
             search_results: Vec::new(),
-            images_paths: images_paths,
             images_embedding: image_embeddings,
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
         }
