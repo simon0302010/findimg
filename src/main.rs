@@ -365,7 +365,7 @@ impl App {
             embed_rank.push((embedding.0.clone(), score));
         }
 
-        embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        embed_rank.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         embed_rank.iter().map(|(s, _)| s.clone()).collect()
     }
