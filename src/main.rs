@@ -187,7 +187,8 @@ impl App {
         // images block
         let block = Block::bordered()
             .title("Images")
-            .title_alignment(Alignment::Center);
+            .title_alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Rgb(0, 139, 139)));
 
         let img_block = block.inner(img_area);
         frame.render_widget(block, img_area);
@@ -262,7 +263,8 @@ impl App {
 
                     let cell_block = Block::bordered()
                         .title(title)
-                        .title_alignment(Alignment::Center);
+                        .title_alignment(Alignment::Center)
+                        .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
                     let inner_area = cell_block.inner(area);
                     frame.render_widget(cell_block, area);
@@ -301,7 +303,8 @@ impl App {
 
             let popup_block = Block::bordered()
                 .title("Select Mode")
-                .title_alignment(Alignment::Center);
+                .title_alignment(Alignment::Center)
+                .fg(BLUE.background);
 
             /*let block_area = popup_block.inner(middle);
 
