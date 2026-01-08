@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, sync::mpsc, time::Duration};
 mod ui;
 use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
 use ratatui_image::{
@@ -18,7 +18,7 @@ mod img_scrape;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Alignment, Constraint, Layout, Position},
+    layout::{Alignment, Constraint, Layout, Position, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
     widgets::{Block, Clear, List, ListItem, Paragraph},
@@ -45,6 +45,7 @@ pub struct App {
     search_results: Vec<SearchResult>,
     images_embedding: HashMap<String, Vec<f32>>,
     picker: Picker,
+    search_area: Rect,
 }
 
 #[derive(Debug, PartialEq)]
@@ -63,6 +64,7 @@ enum InputMode {
 struct SearchResult {
     image: StatefulProtocol,
     confidence: f64,
+    file_path: String,
     last_area: Option<ratatui::layout::Rect>,
 }
 
@@ -104,6 +106,8 @@ impl App {
         let interactive_bar =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let [search_area, mode_area] = interactive_bar.areas(input_area);
+
+        self.search_area = search_area;
 
         let (msg, style) = match self.input_mode {
             InputMode::Normal => {
@@ -188,7 +192,7 @@ impl App {
         let block = Block::bordered()
             .title("Images")
             .title_alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Rgb(0, 139, 139)));
+            .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
         let img_block = block.inner(img_area);
         frame.render_widget(block, img_area);
@@ -254,9 +258,10 @@ impl App {
 
             for (i, area) in areas.into_iter().enumerate() {
                 if let Some(result) = self.search_results.get_mut(i) {
-                    let confidence_text = format!("{}%", (result.confidence * 100.0) as u64);
+                    let confidence_text =
+                        format!("Confidence: {}%", (result.confidence * 100.0) as u64);
                     let title = if i == 0 {
-                        format!("Best: {}", confidence_text)
+                        format!("Highest Confidence: {}", confidence_text)
                     } else {
                         confidence_text
                     };
@@ -264,6 +269,7 @@ impl App {
                     let cell_block = Block::bordered()
                         .title(title)
                         .title_alignment(Alignment::Center)
+                        .title_bottom(format!("[{}]", result.file_path))
                         .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
                     let inner_area = cell_block.inner(area);
@@ -304,6 +310,7 @@ impl App {
             let popup_block = Block::bordered()
                 .title("Select Mode")
                 .title_alignment(Alignment::Center)
+                .title_bottom("Move with the arrow keys, submit by pressing Enter")
                 .fg(BLUE.background);
 
             /*let block_area = popup_block.inner(middle);
@@ -456,6 +463,31 @@ impl App {
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
     fn search(&mut self) -> Vec<SearchResult> {
+        let rightmost_x = self.search_area.right() - 1;
+        let rightmost_y = self.search_area.y + 2;
+
+        let (send_kill, recv_kill) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let animation = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let mut running = true;
+            while running {
+                for frame in &animation {
+                    if recv_kill.try_recv().is_ok() {
+                        running = false;
+                    }
+                    print!("\x1B[{};{}H", rightmost_y, rightmost_x);
+                    print!("{}", frame);
+                    std::io::Write::flush(&mut std::io::stdout()).ok();
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+
+            print!("\x1B[{};{}H", rightmost_y, rightmost_x);
+            print!(" ");
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+        });
+
         let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
 
         let mut embed_rank: Vec<(String, f32)> = vec![];
@@ -496,10 +528,13 @@ impl App {
             let image = self.picker.new_resize_protocol(dyn_img);
             results.push(SearchResult {
                 image,
+                file_path: path.clone(),
                 confidence: *confidence as f64,
                 last_area: None,
             });
         }
+
+        let _ = send_kill.send(());
 
         results
     }
@@ -607,6 +642,7 @@ impl Default for App {
             search_results: Vec::new(),
             images_embedding: image_embeddings,
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
+            search_area: Rect::default(),
         }
     }
 }
