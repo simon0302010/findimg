@@ -364,7 +364,7 @@ impl App {
                         _ => {}
                     },
                     CurrentElement::Modesel => match key.code {
-                        KeyCode::Char('q') => {
+                        KeyCode::Char('q') | KeyCode::Esc => {
                             self.modesel_open = false;
                             self.current_element = CurrentElement::Filter;
                         }
@@ -456,7 +456,7 @@ impl App {
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
     fn search(&mut self) -> Vec<SearchResult> {
-        let text_embeding = rust_embed_text(self.search.clone()).unwrap();
+        let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
 
         let mut embed_rank: Vec<(String, f32)> = vec![];
         for embedding in &self.images_embedding {
@@ -471,9 +471,15 @@ impl App {
             .find(|e| e.option == "Search".to_string())
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            embed_rank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            embed_rank.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .expect("Failed to sort search results")
+            });
         } else {
-            embed_rank.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            embed_rank.sort_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .expect("Failed to sort search results")
+            });
         }
 
         let mut results: Vec<SearchResult> = Vec::new();
@@ -552,30 +558,38 @@ impl Default for App {
                 continue;
             }
             println!("Embedded {}/{} {}", index, images_paths.len(), image);
-            if fs::exists(image.clone() + ".embed").unwrap() {
-                let mut output = File::open(image.clone() + ".embed").unwrap();
+            if fs::exists(image.clone() + ".embed")
+                .expect(&format!("Failed to check if {} exists", image))
+            {
+                let mut output =
+                    File::open(image.clone() + ".embed").expect("Failed to open embed file");
 
                 let mut seralized_buffer = Vec::new();
-                output.read_to_end(&mut seralized_buffer).unwrap();
+                output
+                    .read_to_end(&mut seralized_buffer)
+                    .expect("Failed to read embed file");
 
-                let deserialized: Embedding =
-                    serde_json::from_slice(&seralized_buffer.as_slice()).unwrap();
+                let deserialized: Embedding = serde_json::from_slice(&seralized_buffer.as_slice())
+                    .expect("Failed to parse embed file");
 
                 image_embeddings.insert(deserialized.path, deserialized.vector);
                 continue;
             }
 
-            let embedding = rust_embed_image(image.clone()).unwrap();
+            let embedding = rust_embed_image(image.clone()).expect("Failed to embed image");
             image_embeddings.insert(image.clone(), embedding.clone());
             let to_seralize = Embedding {
                 path: image.clone(),
                 vector: embedding,
             };
 
-            let buffer = serde_json::to_string(&to_seralize).unwrap();
+            let buffer = serde_json::to_string(&to_seralize).expect("Failed to parse buffer");
 
-            let mut output = File::create(image.clone() + ".embed").unwrap();
-            output.write(buffer.as_bytes()).unwrap();
+            let mut output =
+                File::create(image.clone() + ".embed").expect("Failed to create embed file");
+            output
+                .write(buffer.as_bytes())
+                .expect("Failed to write embed file");
         }
 
         Self {
