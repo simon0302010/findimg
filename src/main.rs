@@ -261,7 +261,7 @@ impl App {
                     let confidence_text =
                         format!("Confidence: {}%", (result.confidence * 100.0) as u64);
                     let title = if i == 0 {
-                        format!("Highest Confidence: {}", confidence_text)
+                        format!("Highest {}", confidence_text)
                     } else {
                         confidence_text
                     };
