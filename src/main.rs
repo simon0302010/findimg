@@ -73,14 +73,29 @@ const SEARCH_RESULTS: usize = 20;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().collect::<Vec<String>>();
-    if args.len() > 1
-        && let Err(e) = scrape(PathBuf::from("images/"), args[1].as_str())
-    {
-        println!("Failed to download images: {}", e);
+
+    if args.len() < 2 {
+        println!(
+            "Usage: {} <model_path> [--photos <google photos link>]",
+            args[0]
+        );
         exit(1);
     }
 
-    rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
+    if !fs::exists(PathBuf::from(&args[1])).unwrap_or(false) {
+        eprintln!("ERROR: Model file does not exist");
+        exit(1);
+    }
+    let model_path = &args[1];
+
+    if args.len() > 3 && args[2] == "--photos" {
+        if let Err(e) = scrape(PathBuf::from("images/"), args[3].as_str()) {
+            println!("Failed to download images: {}", e);
+            exit(1);
+        }
+    }
+
+    rust_init(model_path);
     print!("\x1B[2J\x1B[1;1H");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
