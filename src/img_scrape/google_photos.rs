@@ -1,15 +1,9 @@
 use regex::Regex;
 use reqwest::blocking::Client;
 use std::path::PathBuf;
-use std::{
-    collections::HashSet,
-    fs::File,
-    io::Write,
-    path::Path,
-};
+use std::{collections::HashSet, fs::File, io::Write, path::Path};
 
 pub fn scrape(path: PathBuf, album_url: &str) -> Result<(), Box<dyn std::error::Error>> {
-
     let client = Client::builder().user_agent("Mozilla/5.0").build()?;
 
     println!("Fetching album page...");
