@@ -78,6 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     rust_init("clip-vit-large-patch14_ggml-model-q8_0.gguf");
+    print!("\x1B[2J\x1B[1;1H");
     ratatui::run(|terminal| App::default().run(terminal))?;
     rust_end();
     Ok(())
