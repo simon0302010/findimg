@@ -543,6 +543,7 @@ impl App {
             let search_clone = self.search.clone();
             let search_split: Vec<&str> = search_clone.split("-").collect();
             if search_split.len() != 2 {
+                let _ = send_kill.send(());
                 return vec![];
             }
             let positive_embeding =
@@ -574,6 +575,7 @@ impl App {
         {
             let image_embeding = rust_embed_image(self.search.clone());
             if image_embeding.is_none() {
+                let _ = send_kill.send(());
                 return vec![];
             }
             let real_image_embeding = image_embeding.unwrap();
