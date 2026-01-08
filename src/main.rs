@@ -27,8 +27,8 @@ use ratatui::{
 use img_scrape::google_photos::scrape;
 
 use crate::ui::{
-    button::{BLUE, Button, ButtonState},
-    list::{OptionList, OptionStatus, alternate_colors},
+    button::{Button, ButtonState, BLUE},
+    list::{alternate_colors, OptionList, OptionStatus, SearchEnum},
 };
 
 use std::collections::HashMap;
@@ -42,6 +42,7 @@ pub struct App {
     button_pressed: bool,
     modesel_open: bool,
     modesel_list: OptionList,
+    mode: SearchEnum,
     search_results: Vec<SearchResult>,
     images_embedding: HashMap<String, Vec<f32>>,
     picker: Picker,
@@ -136,6 +137,14 @@ impl App {
                             " to clear the search, ".into(),
                             "Enter".bold(),
                             " to start editing".into(),
+                            "    ".into(),
+                            match self.mode {
+                                SearchEnum::Search => "The images will be the most similar to the prompt",
+                                SearchEnum::NegativePrompt => "The images will be the least similar to the prompt",
+                                SearchEnum::Image2Image => "A absolute path that will be matched to similar images",
+                                SearchEnum::Ranking => "Two criteria a \"high-low\" this is a trait followed by the inverse",
+                                _ => ""
+                            }.into()
                         ],
                         Style::default().add_modifier(Modifier::RAPID_BLINK),
                     )
@@ -651,7 +660,16 @@ impl App {
         if let Some(i) = self.modesel_list.state.selected() {
             self.modesel_list.items[i].status = match self.modesel_list.items[i].status {
                 OptionStatus::Checked => OptionStatus::Unchecked,
-                OptionStatus::Unchecked => OptionStatus::Checked,
+                OptionStatus::Unchecked => {
+                                self.mode = match self.modesel_list.items[i].option.as_str() {
+                                    "Search" => SearchEnum::Search,
+                                    "Negative Prompt" => SearchEnum::NegativePrompt,
+                                    "Ranking" => SearchEnum::Ranking,
+                                    "Image 2 Image" => SearchEnum::Image2Image,
+                                    &_ => SearchEnum::Search,
+                                };
+
+                    OptionStatus::Checked},
             }
         }
     }
@@ -727,11 +745,12 @@ impl Default for App {
             current_element: CurrentElement::Search,
             button_pressed: false,
             modesel_open: false,
+            mode: SearchEnum::Search,
             modesel_list: OptionList::from_iter([
-                (OptionStatus::Checked, "Search"),
-                (OptionStatus::Unchecked, "Negative Prompt"),
-                (OptionStatus::Unchecked, "Ranking"),
-                (OptionStatus::Unchecked, "Image 2 Image"),
+                (OptionStatus::Checked, "Search", SearchEnum::Search),
+                (OptionStatus::Unchecked, "Negative Prompt", SearchEnum::NegativePrompt),
+                (OptionStatus::Unchecked, "Ranking", SearchEnum::Ranking),
+                (OptionStatus::Unchecked, "Image 2 Image", SearchEnum::Image2Image),
             ]),
             search_results: Vec::new(),
             images_embedding: image_embeddings,
