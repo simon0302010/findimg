@@ -390,7 +390,14 @@ impl App {
                     KeyCode::Enter => {
                         self.search_results = self.search();
                     }
-                    KeyCode::Char(to_insert) => self.enter_char(to_insert),
+                    KeyCode::Char(to_insert) => {
+                        let char_to_insert = if key.modifiers.contains(event::KeyModifiers::SHIFT) {
+                            to_insert.to_uppercase().next().unwrap_or(to_insert)
+                        } else {
+                            to_insert
+                        };
+                        self.enter_char(char_to_insert);
+                    }
                     KeyCode::Backspace => self.delete_char(),
                     KeyCode::Delete => self.delete_right(),
                     KeyCode::Left => self.move_cursor_left(),
@@ -488,13 +495,7 @@ impl App {
             std::io::Write::flush(&mut std::io::stdout()).ok();
         });
 
-        let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
-
         let mut embed_rank: Vec<(String, f32)> = vec![];
-        for embedding in &self.images_embedding {
-            let score = rust_embed_compare(&text_embeding, &embedding.1);
-            embed_rank.push((embedding.0.clone(), score));
-        }
 
         if self
             .modesel_list
@@ -503,13 +504,87 @@ impl App {
             .find(|e| e.option == "Search".to_string())
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
+            let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
+
+            for embedding in &self.images_embedding {
+                let score = rust_embed_compare(&text_embeding, &embedding.1);
+                embed_rank.push((embedding.0.clone(), score));
+            }
+
             embed_rank.sort_by(|a, b| {
                 b.1.partial_cmp(&a.1)
                     .expect("Failed to sort search results")
             });
-        } else {
+        } else if self
+            .modesel_list
+            .items
+            .iter()
+            .find(|e| e.option == "Negative Prompt".to_string())
+            .is_some_and(|e| e.status == OptionStatus::Checked)
+        {
+            let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
+
+            for embedding in &self.images_embedding {
+                let score = rust_embed_compare(&text_embeding, &embedding.1);
+                embed_rank.push((embedding.0.clone(), score));
+            }
+
             embed_rank.sort_by(|a, b| {
                 a.1.partial_cmp(&b.1)
+                    .expect("Failed to sort search results")
+            });
+        } else if self
+            .modesel_list
+            .items
+            .iter()
+            .find(|e| e.option == "Ranking".to_string())
+            .is_some_and(|e| e.status == OptionStatus::Checked)
+        {
+            let search_clone = self.search.clone();
+            let search_split: Vec<&str> = search_clone.split("-").collect();
+            if search_split.len() != 2 {
+                return vec![];
+            }
+            let positive_embeding =
+                rust_embed_text(search_split[0].to_string()).expect("Failed to embed text");
+            let negative_embeding =
+                rust_embed_text(search_split[1].to_string()).expect("Failed to embed text");
+
+            for embedding in &self.images_embedding {
+                let score = rust_embed_compare(&positive_embeding, &embedding.1);
+                embed_rank.push((embedding.0.clone(), score));
+            }
+
+            for embedding in &mut embed_rank {
+                let score =
+                    rust_embed_compare(&negative_embeding, &self.images_embedding[&embedding.0]);
+                embedding.1 -= score;
+            }
+
+            embed_rank.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .expect("Failed to sort search results")
+            });
+        } else if self
+            .modesel_list
+            .items
+            .iter()
+            .find(|e| e.option == "Image 2 Image".to_string())
+            .is_some_and(|e| e.status == OptionStatus::Checked)
+        {
+            let image_embeding = rust_embed_image(self.search.clone());
+            if image_embeding.is_none() {
+                return vec![];
+            }
+            let real_image_embeding = image_embeding.unwrap();
+
+            for embedding in &self.images_embedding {
+                let score = rust_embed_compare(&real_image_embeding, &embedding.1);
+                embed_rank.push((embedding.0.clone(), score));
+            }
+
+            embed_rank.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
                     .expect("Failed to sort search results")
             });
         }
@@ -638,6 +713,8 @@ impl Default for App {
             modesel_list: OptionList::from_iter([
                 (OptionStatus::Checked, "Search"),
                 (OptionStatus::Unchecked, "Negative Prompt"),
+                (OptionStatus::Unchecked, "Ranking"),
+                (OptionStatus::Unchecked, "Image 2 Image"),
             ]),
             search_results: Vec::new(),
             images_embedding: image_embeddings,
