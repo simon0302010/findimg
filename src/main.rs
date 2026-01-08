@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        let _ = terminal.clear();
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
@@ -178,40 +179,6 @@ impl App {
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, help_area);
 
-        let input = Paragraph::new(self.search.as_str())
-            .style(match self.input_mode {
-                InputMode::Normal => {
-                    if self.current_element == CurrentElement::Search {
-                        Style::default().fg(BLUE.highlight)
-                    } else {
-                        Style::default().fg(BLUE.background)
-                    }
-                }
-                InputMode::Editing => Style::default().fg(Color::LightCyan),
-            })
-            .block(Block::bordered().title("Search"));
-        frame.render_widget(input, search_area);
-        match self.input_mode {
-            InputMode::Normal => {}
-            InputMode::Editing => frame.set_cursor_position(Position::new(
-                search_area.x + self.char_index as u16 + 1,
-                search_area.y + 1,
-            )),
-        }
-
-        let button_state = if self.current_element == CurrentElement::Filter {
-            if self.button_pressed {
-                ButtonState::Active
-            } else {
-                ButtonState::Selected
-            }
-        } else {
-            ButtonState::Normal
-        };
-        self.button_pressed = false;
-        let mode_selector = Button::new("Choose Mode").state(button_state).theme(BLUE);
-        frame.render_widget(mode_selector, mode_area);
-
         // images block
         let block = Block::bordered()
             .title("Images")
@@ -219,6 +186,7 @@ impl App {
             .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
         let img_block = block.inner(img_area);
+        frame.render_widget(Clear, img_area);
         frame.render_widget(block, img_area);
 
         let results_count = self.search_results.len().min(10);
@@ -313,6 +281,41 @@ impl App {
                 }
             }
         }
+
+        // input area
+        let input = Paragraph::new(self.search.as_str())
+            .style(match self.input_mode {
+                InputMode::Normal => {
+                    if self.current_element == CurrentElement::Search {
+                        Style::default().fg(BLUE.highlight)
+                    } else {
+                        Style::default().fg(BLUE.background)
+                    }
+                }
+                InputMode::Editing => Style::default().fg(Color::LightCyan),
+            })
+            .block(Block::bordered().title("Search"));
+        frame.render_widget(input, search_area);
+        match self.input_mode {
+            InputMode::Normal => {}
+            InputMode::Editing => frame.set_cursor_position(Position::new(
+                search_area.x + self.char_index as u16 + 1,
+                search_area.y + 1,
+            )),
+        }
+
+        let button_state = if self.current_element == CurrentElement::Filter {
+            if self.button_pressed {
+                ButtonState::Active
+            } else {
+                ButtonState::Selected
+            }
+        } else {
+            ButtonState::Normal
+        };
+        self.button_pressed = false;
+        let mode_selector = Button::new("Choose Mode").state(button_state).theme(BLUE);
+        frame.render_widget(mode_selector, mode_area);
 
         if self.modesel_open {
             let popup_vertical = Layout::vertical([
