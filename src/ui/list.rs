@@ -41,9 +41,19 @@ pub struct OptionList {
 }
 
 #[derive(Debug)]
+pub enum SearchEnum {
+    Search,
+    NegativePrompt,
+    Ranking,
+    Image2Image
+}
+
+#[derive(Debug)]
 pub struct OptionItem {
     pub option: String,
     pub status: OptionStatus,
+    pub search_type: SearchEnum 
+
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -52,11 +62,11 @@ pub enum OptionStatus {
     Checked,
 }
 
-impl FromIterator<(OptionStatus, &'static str)> for OptionList {
-    fn from_iter<I: IntoIterator<Item = (OptionStatus, &'static str)>>(iter: I) -> Self {
+impl FromIterator<(OptionStatus, &'static str, SearchEnum)> for OptionList {
+    fn from_iter<I: IntoIterator<Item = (OptionStatus, &'static str, SearchEnum)>>(iter: I) -> Self {
         let items = iter
             .into_iter()
-            .map(|(status, option)| OptionItem::new(status, option))
+            .map(|(status, option, search_type)| OptionItem::new(status, option, search_type))
             .collect();
         let state = ListState::default();
         Self { items, state }
@@ -64,10 +74,11 @@ impl FromIterator<(OptionStatus, &'static str)> for OptionList {
 }
 
 impl OptionItem {
-    fn new(status: OptionStatus, todo: &str) -> Self {
+    fn new(status: OptionStatus, todo: &str, search_type: SearchEnum ) -> Self {
         Self {
             status,
             option: todo.to_string(),
+            search_type,
         }
     }
 }
