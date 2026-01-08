@@ -597,15 +597,19 @@ impl App {
             .find(|e| e.option == "Image 2 Image")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let image_embeding = rust_embed_image(self.search.clone());
-            if image_embeding.is_none() {
+            let image_embedding = rust_embed_image(self.search.clone());
+            if image_embedding.is_none() {
                 let _ = send_kill.send(());
-                return vec![];
+                return Vec::new();
             }
-            let real_image_embeding = image_embeding.unwrap();
+
+            let real_image_embedding = match image_embedding {
+                Some(embed) => embed,
+                None => return Vec::new(),
+            };
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&real_image_embeding, embedding.1);
+                let score = rust_embed_compare(&real_image_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
