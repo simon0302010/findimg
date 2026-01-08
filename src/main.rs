@@ -27,8 +27,8 @@ use ratatui::{
 use img_scrape::google_photos::scrape;
 
 use crate::ui::{
-    button::{Button, ButtonState, BLUE},
-    list::{alternate_colors, OptionList, OptionStatus, SearchEnum},
+    button::{BLUE, Button, ButtonState},
+    list::{OptionList, OptionStatus, SearchEnum, alternate_colors},
 };
 
 use std::collections::HashMap;
@@ -88,11 +88,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let model_path = &args[1];
 
-    if args.len() > 3 && args[2] == "--photos" {
-        if let Err(e) = scrape(PathBuf::from("images/"), args[3].as_str()) {
-            println!("Failed to download images: {}", e);
-            exit(1);
-        }
+    if args.len() > 3
+        && args[2] == "--photos"
+        && let Err(e) = scrape(PathBuf::from("images/"), args[3].as_str())
+    {
+        println!("Failed to download images: {}", e);
+        exit(1);
     }
 
     rust_init(model_path);
@@ -143,7 +144,6 @@ impl App {
                                 SearchEnum::NegativePrompt => "The images will be the least similar to the prompt",
                                 SearchEnum::Image2Image => "A absolute path that will be matched to similar images",
                                 SearchEnum::Ranking => "Two criteria a \"high-low\" this is a trait followed by the inverse",
-                                _ => ""
                             }.into()
                         ],
                         Style::default().add_modifier(Modifier::RAPID_BLINK),
@@ -525,13 +525,13 @@ impl App {
             .modesel_list
             .items
             .iter()
-            .find(|e| e.option == "Search".to_string())
+            .find(|e| e.option == "Search")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
             let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&text_embeding, &embedding.1);
+                let score = rust_embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -543,13 +543,13 @@ impl App {
             .modesel_list
             .items
             .iter()
-            .find(|e| e.option == "Negative Prompt".to_string())
+            .find(|e| e.option == "Negative Prompt")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
             let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&text_embeding, &embedding.1);
+                let score = rust_embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -561,7 +561,7 @@ impl App {
             .modesel_list
             .items
             .iter()
-            .find(|e| e.option == "Ranking".to_string())
+            .find(|e| e.option == "Ranking")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
             let search_clone = self.search.clone();
@@ -576,7 +576,7 @@ impl App {
                 rust_embed_text(search_split[1].to_string()).expect("Failed to embed text");
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&positive_embeding, &embedding.1);
+                let score = rust_embed_compare(&positive_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -594,7 +594,7 @@ impl App {
             .modesel_list
             .items
             .iter()
-            .find(|e| e.option == "Image 2 Image".to_string())
+            .find(|e| e.option == "Image 2 Image")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
             let image_embeding = rust_embed_image(self.search.clone());
@@ -605,7 +605,7 @@ impl App {
             let real_image_embeding = image_embeding.unwrap();
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&real_image_embeding, &embedding.1);
+                let score = rust_embed_compare(&real_image_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -661,15 +661,16 @@ impl App {
             self.modesel_list.items[i].status = match self.modesel_list.items[i].status {
                 OptionStatus::Checked => OptionStatus::Unchecked,
                 OptionStatus::Unchecked => {
-                                self.mode = match self.modesel_list.items[i].option.as_str() {
-                                    "Search" => SearchEnum::Search,
-                                    "Negative Prompt" => SearchEnum::NegativePrompt,
-                                    "Ranking" => SearchEnum::Ranking,
-                                    "Image 2 Image" => SearchEnum::Image2Image,
-                                    &_ => SearchEnum::Search,
-                                };
+                    self.mode = match self.modesel_list.items[i].option.as_str() {
+                        "Search" => SearchEnum::Search,
+                        "Negative Prompt" => SearchEnum::NegativePrompt,
+                        "Ranking" => SearchEnum::Ranking,
+                        "Image 2 Image" => SearchEnum::Image2Image,
+                        &_ => SearchEnum::Search,
+                    };
 
-                    OptionStatus::Checked},
+                    OptionStatus::Checked
+                }
             }
         }
     }
@@ -690,10 +691,8 @@ impl Default for App {
         let mut images_paths: Vec<String> = vec![];
         let mut image_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
 
-        for path in paths {
-            if let Ok(entry) = path {
-                images_paths.push(entry.path().display().to_string());
-            }
+        for entry in paths.flatten() {
+            images_paths.push(entry.path().display().to_string());
         }
 
         let mut index: usize = 0;
@@ -704,7 +703,7 @@ impl Default for App {
             }
             println!("Embedded {}/{} {}", index, images_paths.len(), image);
             if fs::exists(image.clone() + ".embed")
-                .expect(&format!("Failed to check if {} exists", image))
+                .unwrap_or_else(|_| panic!("Failed to check if {} exists", image))
             {
                 let mut output =
                     File::open(image.clone() + ".embed").expect("Failed to open embed file");
@@ -714,7 +713,7 @@ impl Default for App {
                     .read_to_end(&mut seralized_buffer)
                     .expect("Failed to read embed file");
 
-                let deserialized: Embedding = serde_json::from_slice(&seralized_buffer.as_slice())
+                let deserialized: Embedding = serde_json::from_slice(seralized_buffer.as_slice())
                     .expect("Failed to parse embed file");
 
                 image_embeddings.insert(deserialized.path, deserialized.vector);
@@ -733,7 +732,7 @@ impl Default for App {
             let mut output =
                 File::create(image.clone() + ".embed").expect("Failed to create embed file");
             output
-                .write(buffer.as_bytes())
+                .write_all(buffer.as_bytes())
                 .expect("Failed to write embed file");
         }
 
@@ -748,9 +747,17 @@ impl Default for App {
             mode: SearchEnum::Search,
             modesel_list: OptionList::from_iter([
                 (OptionStatus::Checked, "Search", SearchEnum::Search),
-                (OptionStatus::Unchecked, "Negative Prompt", SearchEnum::NegativePrompt),
+                (
+                    OptionStatus::Unchecked,
+                    "Negative Prompt",
+                    SearchEnum::NegativePrompt,
+                ),
                 (OptionStatus::Unchecked, "Ranking", SearchEnum::Ranking),
-                (OptionStatus::Unchecked, "Image 2 Image", SearchEnum::Image2Image),
+                (
+                    OptionStatus::Unchecked,
+                    "Image 2 Image",
+                    SearchEnum::Image2Image,
+                ),
             ]),
             search_results: Vec::new(),
             images_embedding: image_embeddings,

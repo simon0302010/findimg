@@ -45,15 +45,14 @@ pub enum SearchEnum {
     Search,
     NegativePrompt,
     Ranking,
-    Image2Image
+    Image2Image,
 }
 
 #[derive(Debug)]
 pub struct OptionItem {
     pub option: String,
     pub status: OptionStatus,
-    pub search_type: SearchEnum 
-
+    pub search_type: SearchEnum,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,7 +62,9 @@ pub enum OptionStatus {
 }
 
 impl FromIterator<(OptionStatus, &'static str, SearchEnum)> for OptionList {
-    fn from_iter<I: IntoIterator<Item = (OptionStatus, &'static str, SearchEnum)>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = (OptionStatus, &'static str, SearchEnum)>>(
+        iter: I,
+    ) -> Self {
         let items = iter
             .into_iter()
             .map(|(status, option, search_type)| OptionItem::new(status, option, search_type))
@@ -74,7 +75,7 @@ impl FromIterator<(OptionStatus, &'static str, SearchEnum)> for OptionList {
 }
 
 impl OptionItem {
-    fn new(status: OptionStatus, todo: &str, search_type: SearchEnum ) -> Self {
+    fn new(status: OptionStatus, todo: &str, search_type: SearchEnum) -> Self {
         Self {
             status,
             option: todo.to_string(),
@@ -84,7 +85,7 @@ impl OptionItem {
 }
 
 pub const fn alternate_colors(i: usize) -> Color {
-    if i % 2 == 0 {
+    if i.is_multiple_of(2) {
         NORMAL_ROW_BG
     } else {
         ALT_ROW_BG_COLOR
