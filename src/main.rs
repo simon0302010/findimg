@@ -503,8 +503,13 @@ impl App {
         {
             let search_clone = self.search.clone();
             let search_split: Vec<&str> = search_clone.split("-").collect();
-            let positive_embeding = rust_embed_text(search_split[0].to_string()).expect("Failed to embed text");
-            let negative_embeding = rust_embed_text(search_split[1].to_string()).expect("Failed to embed text");
+            if (search_split.len() != 2) {
+                return vec![];
+            }
+            let positive_embeding =
+                rust_embed_text(search_split[0].to_string()).expect("Failed to embed text");
+            let negative_embeding =
+                rust_embed_text(search_split[1].to_string()).expect("Failed to embed text");
 
             for embedding in &self.images_embedding {
                 let score = rust_embed_compare(&positive_embeding, &embedding.1);
@@ -512,10 +517,32 @@ impl App {
             }
 
             for embedding in &mut embed_rank {
-                let score = rust_embed_compare(&negative_embeding, &self.images_embedding[&embedding.0]);
+                let score =
+                    rust_embed_compare(&negative_embeding, &self.images_embedding[&embedding.0]);
                 embedding.1 -= score;
             }
 
+            embed_rank.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .expect("Failed to sort search results")
+            });
+        } else if self
+            .modesel_list
+            .items
+            .iter()
+            .find(|e| e.option == "Image 2 Image".to_string())
+            .is_some_and(|e| e.status == OptionStatus::Checked)
+        {
+            let image_embeding = rust_embed_image(self.search.clone());
+            if (text_embeding.is_none()) {
+                return vec![];
+            }
+            let real_image_embeding = image_embeding.unwrap();
+
+            for embedding in &self.images_embedding {
+                let score = rust_embed_compare(&real_image_embeding, &embedding.1);
+                embed_rank.push((embedding.0.clone(), score));
+            }
 
             embed_rank.sort_by(|a, b| {
                 b.1.partial_cmp(&a.1)
@@ -645,6 +672,7 @@ impl Default for App {
                 (OptionStatus::Checked, "Search"),
                 (OptionStatus::Unchecked, "Negative Prompt"),
                 (OptionStatus::Unchecked, "Ranking"),
+                (OptionStatus::Unchecked, "Image 2 Image"),
             ]),
             search_results: Vec::new(),
             images_embedding: image_embeddings,
