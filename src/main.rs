@@ -47,6 +47,7 @@ pub struct App {
     images_embedding: HashMap<String, Vec<f32>>,
     picker: Picker,
     search_area: Rect,
+    clear_terminal: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -107,6 +108,10 @@ impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         let _ = terminal.clear();
         while !self.exit {
+            if self.clear_terminal {
+                terminal.clear();
+                self.clear_terminal = false;
+            }
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
         }
@@ -376,43 +381,51 @@ impl App {
             }
 
             match self.input_mode {
-                InputMode::Normal => match self.current_element {
-                    CurrentElement::Search => match key.code {
-                        KeyCode::Char('c') => self.clear_search(),
-                        KeyCode::Char('q') => self.exit(),
-                        KeyCode::Right => self.current_element = CurrentElement::Filter,
-                        KeyCode::Left => self.current_element = CurrentElement::Search,
-                        KeyCode::Enter => self.input_mode = InputMode::Editing,
-                        _ => {}
-                    },
-                    CurrentElement::Filter => match key.code {
-                        KeyCode::Char('q') => self.exit(),
-                        KeyCode::Right => self.current_element = CurrentElement::Filter,
-                        KeyCode::Left => self.current_element = CurrentElement::Search,
-                        KeyCode::Enter => {
-                            self.button_pressed = true;
-                            self.modesel_open = !self.modesel_open;
-                            self.current_element = CurrentElement::Modesel;
-                            self.modesel_list.state.select(Some(0));
-                        }
-                        _ => {}
-                    },
-                    CurrentElement::Modesel => match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            self.modesel_open = false;
-                            self.current_element = CurrentElement::Filter;
-                        }
-                        KeyCode::Enter => {
-                            self.toggle_status();
-                            self.modesel_open = false;
-                            self.current_element = CurrentElement::Filter;
-                        }
-                        KeyCode::Char(' ') => self.toggle_status(),
-                        KeyCode::Down => self.select_next(),
-                        KeyCode::Up => self.select_previous(),
-                        _ => {}
-                    },
-                },
+                InputMode::Normal => {
+                    if key.code == KeyCode::Char('r') {
+                        self.clear_terminal = true;
+                    }
+
+                    match self.current_element {
+                        CurrentElement::Search => match key.code {
+                            KeyCode::Char('c') => self.clear_search(),
+                            KeyCode::Char('q') => self.exit(),
+                            KeyCode::Right => self.current_element = CurrentElement::Filter,
+                            KeyCode::Left => self.current_element = CurrentElement::Search,
+                            KeyCode::Enter => self.input_mode = InputMode::Editing,
+                            _ => {}
+                        },
+                        CurrentElement::Filter => match key.code {
+                            KeyCode::Char('q') => self.exit(),
+                            KeyCode::Right => self.current_element = CurrentElement::Filter,
+                            KeyCode::Left => self.current_element = CurrentElement::Search,
+                            KeyCode::Enter => {
+                                self.button_pressed = true;
+                                self.modesel_open = !self.modesel_open;
+                                self.current_element = CurrentElement::Modesel;
+                                self.modesel_list.state.select(Some(0));
+                            }
+                            _ => {}
+                        },
+                        CurrentElement::Modesel => match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => {
+                                self.modesel_open = false;
+                                self.current_element = CurrentElement::Filter;
+                                self.invalidate_image_cache();
+                            }
+                            KeyCode::Enter => {
+                                self.toggle_status();
+                                self.modesel_open = false;
+                                self.current_element = CurrentElement::Filter;
+                                self.invalidate_image_cache();
+                            }
+                            KeyCode::Char(' ') => self.toggle_status(),
+                            KeyCode::Down => self.select_next(),
+                            KeyCode::Up => self.select_previous(),
+                            _ => {}
+                        },
+                    }
+                }
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
                     KeyCode::Enter => {
                         self.search_results = self.search();
@@ -469,6 +482,13 @@ impl App {
             .map(|(i, _)| i)
             .nth(self.char_index)
             .unwrap_or(self.search.len())
+    }
+
+    /// Removes the cached area from each image
+    fn invalidate_image_cache(&mut self) {
+        for result in &mut self.search_results {
+            result.last_area = None;
+        }
     }
 
     fn delete_char(&mut self) {
@@ -770,6 +790,7 @@ impl Default for App {
             images_embedding: image_embeddings,
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
             search_area: Rect::default(),
+            clear_terminal: false,
         }
     }
 }
