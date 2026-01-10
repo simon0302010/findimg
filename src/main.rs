@@ -18,7 +18,7 @@ mod img_scrape;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Alignment, Constraint, HorizontalAlignment, Layout, Position, Rect},
+    layout::{Constraint, HorizontalAlignment, Layout, Position, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
     widgets::{Block, Clear, List, ListItem, Paragraph},
@@ -377,7 +377,7 @@ impl App {
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
-        if let Ok(true) = event::poll(std::time::Duration::from_millis(1000))
+        if let Ok(true) = event::poll(std::time::Duration::from_millis(500))
             && let Event::Key(mut key) = event::read()?
         {
             if let KeyCode::Char(c) = key.code {
@@ -394,7 +394,6 @@ impl App {
                         self.notifications.add(Message::new(
                             "User pressed space",
                             MessageSeverity::Warning,
-                            "Warning",
                             Duration::from_secs(5),
                         ));
                     }
