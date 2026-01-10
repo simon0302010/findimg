@@ -18,7 +18,7 @@ mod img_scrape;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Alignment, Constraint, Layout, Position, Rect},
+    layout::{Alignment, Constraint, HorizontalAlignment, Layout, Position, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Text},
     widgets::{Block, Clear, List, ListItem, Paragraph},
@@ -29,6 +29,7 @@ use img_scrape::google_photos::scrape;
 use crate::ui::{
     button::{BLUE, Button, ButtonState},
     list::{OptionList, OptionStatus, SearchEnum, alternate_colors},
+    message::{Message, MessageSeverity, Messages},
 };
 
 use std::collections::HashMap;
@@ -48,6 +49,7 @@ pub struct App {
     picker: Picker,
     search_area: Rect,
     clear_terminal: bool,
+    notifications: Messages,
 }
 
 #[derive(Debug, PartialEq)]
@@ -109,7 +111,7 @@ impl App {
         let _ = terminal.clear();
         while !self.exit {
             if self.clear_terminal {
-                terminal.clear();
+                let _ = terminal.clear();
                 self.clear_terminal = false;
             }
             terminal.draw(|frame| self.draw(frame))?;
@@ -187,7 +189,7 @@ impl App {
         // images block
         let block = Block::bordered()
             .title("Images")
-            .title_alignment(Alignment::Center)
+            .title_alignment(HorizontalAlignment::Center)
             .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
         let img_block = block.inner(img_area);
@@ -265,7 +267,7 @@ impl App {
 
                     let cell_block = Block::bordered()
                         .title(title)
-                        .title_alignment(Alignment::Center)
+                        .title_alignment(HorizontalAlignment::Center)
                         .title_bottom(format!("[{}]", result.file_path))
                         .style(Style::default().fg(Color::Rgb(70, 130, 180)));
 
@@ -341,7 +343,7 @@ impl App {
 
             let popup_block = Block::bordered()
                 .title("Select Mode")
-                .title_alignment(Alignment::Center)
+                .title_alignment(HorizontalAlignment::Center)
                 .title_bottom("Move with the arrow keys, submit by pressing Enter")
                 .fg(BLUE.background);
 
@@ -370,6 +372,8 @@ impl App {
 
             frame.render_stateful_widget(list, middle, &mut self.modesel_list.state);
         }
+
+        self.notifications.draw(frame);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -384,6 +388,15 @@ impl App {
                 InputMode::Normal => {
                     if key.code == KeyCode::Char('r') {
                         self.clear_terminal = true;
+                    }
+
+                    if key.code == KeyCode::Char(' ') {
+                        self.notifications.add(Message::new(
+                            "User pressed space",
+                            MessageSeverity::Warning,
+                            "Warning",
+                            Duration::from_secs(5),
+                        ));
                     }
 
                     match self.current_element {
@@ -791,6 +804,7 @@ impl Default for App {
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
             search_area: Rect::default(),
             clear_terminal: false,
+            notifications: Messages::default(),
         }
     }
 }
