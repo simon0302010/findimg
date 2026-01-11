@@ -1,4 +1,4 @@
-// This file is taken from the ratatui examples and modified to suit this project.
+// Some contents of this file are from the ratatui button example
 
 #![allow(unused)]
 
@@ -19,6 +19,7 @@ pub struct Button<'a> {
     padding: (u16, u16, u16, u16),
 }
 
+/// Button states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonState {
     Normal,
@@ -55,8 +56,8 @@ pub const GREEN: Theme = Theme {
     shadow: Color::Rgb(32, 96, 32),
 };
 
-/// A button with a label that can be themed.
 impl<'a> Button<'a> {
+    /// Creates a new button
     pub fn new<T: Into<Line<'a>>>(label: T) -> Self {
         Button {
             label: label.into(),
@@ -66,17 +67,19 @@ impl<'a> Button<'a> {
         }
     }
 
+    /// Sets the theme of the button
     pub const fn theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
         self
     }
 
+    /// Sets the state of the button
     pub const fn state(mut self, state: ButtonState) -> Self {
         self.state = state;
         self
     }
 
-    /// sets padding (top, right, bottom, left)
+    /// Sets padding (top, right, bottom, left)
     pub const fn padding(mut self, padding: (u16, u16, u16, u16)) -> Self {
         self.padding = padding;
         self
@@ -128,6 +131,7 @@ impl<'a> Widget for Button<'a> {
 }
 
 impl Button<'_> {
+    /// Returns the current colors of the button depending on the state
     const fn colors(&self) -> (Color, Color, Color, Color) {
         let theme = self.theme;
         match self.state {

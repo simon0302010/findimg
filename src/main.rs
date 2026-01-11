@@ -1,12 +1,14 @@
 use std::{io::Read, sync::mpsc, time::Duration};
 mod ui;
-use clipers::{rust_embed_compare, rust_embed_image, rust_embed_text, rust_end, rust_init};
+use cliprs::{
+    cliprs_embed_compare, cliprs_embed_image, cliprs_embed_text, cliprs_end, cliprs_init,
+    poll_warnings,
+};
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    error::Error,
     fs::{self, File},
     io::{self, Write},
     path::PathBuf,
@@ -74,7 +76,7 @@ struct SearchResult {
 
 const SEARCH_RESULTS: usize = 20;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().collect::<Vec<String>>();
 
     if args.len() < 2 {
@@ -99,10 +101,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         exit(1);
     }
 
-    rust_init(model_path);
-    print!("\x1B[2J\x1B[1;1H");
+    cliprs_init(model_path);
     ratatui::run(|terminal| App::default().run(terminal))?;
-    rust_end();
+    cliprs_end();
     Ok(())
 }
 
@@ -373,6 +374,15 @@ impl App {
             frame.render_stateful_widget(list, middle, &mut self.modesel_list.state);
         }
 
+        let warnings = poll_warnings();
+        for warning in warnings {
+            self.notifications.add(Message::new(
+                warning,
+                MessageSeverity::Warning,
+                Duration::from_secs(3),
+            ));
+        }
+
         self.notifications.draw(frame);
     }
 
@@ -440,7 +450,9 @@ impl App {
                 }
                 InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
                     KeyCode::Enter => {
-                        self.search_results = self.search();
+                        if let Some(results) = self.search() {
+                            self.search_results = results;
+                        }
                     }
                     KeyCode::Char(to_insert) => {
                         let char_to_insert = if key.modifiers.contains(event::KeyModifiers::SHIFT) {
@@ -528,7 +540,7 @@ impl App {
     // gets called whenever enter is pressed.
     // is supposed to return an array of all matching image paths from best match to worst.
     // returns as many results as SEARCH_RESULTS specifies.
-    fn search(&mut self) -> Vec<SearchResult> {
+    fn search(&mut self) -> Option<Vec<SearchResult>> {
         let rightmost_x = self.search_area.right() - 1;
         let rightmost_y = self.search_area.y + 2;
 
@@ -563,10 +575,21 @@ impl App {
             .find(|e| e.option == "Search")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
+            let text_embeding = match cliprs_embed_text(self.search.clone()) {
+                Ok(embed) => embed,
+                Err(e) => {
+                    let _ = send_kill.send(());
+                    self.notifications.add(Message::new(
+                        e,
+                        MessageSeverity::Error,
+                        Duration::from_secs(3),
+                    ));
+                    return None;
+                }
+            };
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&text_embeding, embedding.1);
+                let score = cliprs_embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -581,10 +604,21 @@ impl App {
             .find(|e| e.option == "Negative Prompt")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = rust_embed_text(self.search.clone()).expect("Failed to embed text");
+            let text_embeding = match cliprs_embed_text(self.search.clone()) {
+                Ok(embed) => embed,
+                Err(e) => {
+                    let _ = send_kill.send(());
+                    self.notifications.add(Message::new(
+                        e,
+                        MessageSeverity::Error,
+                        Duration::from_secs(3),
+                    ));
+                    return None;
+                }
+            };
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&text_embeding, embedding.1);
+                let score = cliprs_embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -603,21 +637,32 @@ impl App {
             let search_split: Vec<&str> = search_clone.split("-").collect();
             if search_split.len() != 2 {
                 let _ = send_kill.send(());
-                return vec![];
+                return None;
             }
-            let positive_embeding =
-                rust_embed_text(search_split[0].to_string()).expect("Failed to embed text");
-            let negative_embeding =
-                rust_embed_text(search_split[1].to_string()).expect("Failed to embed text");
+            let positive_embedding = cliprs_embed_text(search_split[0].to_string());
+            let negative_embedding = cliprs_embed_text(search_split[1].to_string());
+
+            if positive_embedding.is_err() && negative_embedding.is_err() {
+                let _ = send_kill.send(());
+                self.notifications.add(Message::new(
+                    "Failed to embed text",
+                    MessageSeverity::Error,
+                    Duration::from_secs(3),
+                ));
+                return None;
+            }
+
+            let positive_embedding = positive_embedding.unwrap();
+            let negative_embedding = negative_embedding.unwrap();
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&positive_embeding, embedding.1);
+                let score = cliprs_embed_compare(&positive_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
             for embedding in &mut embed_rank {
                 let score =
-                    rust_embed_compare(&negative_embeding, &self.images_embedding[&embedding.0]);
+                    cliprs_embed_compare(&negative_embedding, &self.images_embedding[&embedding.0]);
                 embedding.1 -= score;
             }
 
@@ -632,19 +677,23 @@ impl App {
             .find(|e| e.option == "Image 2 Image")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let image_embedding = rust_embed_image(self.search.clone());
-            if image_embedding.is_none() {
-                let _ = send_kill.send(());
-                return Vec::new();
-            }
+            let image_embedding = cliprs_embed_image(self.search.clone());
 
             let real_image_embedding = match image_embedding {
-                Some(embed) => embed,
-                None => return Vec::new(),
+                Ok(embed) => embed,
+                Err(e) => {
+                    let _ = send_kill.send(());
+                    self.notifications.add(Message::new(
+                        e,
+                        MessageSeverity::Error,
+                        Duration::from_secs(3),
+                    ));
+                    return None;
+                }
             };
 
             for embedding in &self.images_embedding {
-                let score = rust_embed_compare(&real_image_embedding, embedding.1);
+                let score = cliprs_embed_compare(&real_image_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -676,7 +725,7 @@ impl App {
 
         let _ = send_kill.send(());
 
-        results
+        Some(results)
     }
 
     fn clear_search(&mut self) {
@@ -759,7 +808,7 @@ impl Default for App {
                 continue;
             }
 
-            let embedding = rust_embed_image(image.clone()).expect("Failed to embed image");
+            let embedding = cliprs_embed_image(image.clone()).expect("Failed to embed image");
             image_embeddings.insert(image.clone(), embedding.clone());
             let to_seralize = Embedding {
                 path: image.clone(),
