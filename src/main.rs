@@ -1,9 +1,6 @@
 use std::{io::Read, sync::mpsc, time::Duration};
 mod ui;
-use cliprs::{
-    cliprs_embed_compare, cliprs_embed_image, cliprs_embed_text, cliprs_end, cliprs_init,
-    poll_warnings,
-};
+use cliprs::{ClipModel, poll_warnings};
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
@@ -36,7 +33,10 @@ use crate::ui::{
 
 use std::collections::HashMap;
 
+const SUPPORTED_IMAGE_FORMATS: [&str; 10] = ["jpg", "jpeg", "png", "tga", "bmp", "psd"," gif", "hdr", "pic", "ppm"];
+
 pub struct App {
+    model: ClipModel,
     search: String,
     input_mode: InputMode,
     char_index: usize,
@@ -91,7 +91,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("ERROR: Model file does not exist");
         exit(1);
     }
-    let model_path = &args[1];
 
     if args.len() > 3
         && args[2] == "--photos"
@@ -101,9 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         exit(1);
     }
 
-    cliprs_init(model_path);
     ratatui::run(|terminal| App::default().run(terminal))?;
-    cliprs_end();
     Ok(())
 }
 
@@ -575,7 +572,7 @@ impl App {
             .find(|e| e.option == "Search")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = match cliprs_embed_text(self.search.clone()) {
+            let text_embeding = match self.model.embed_text(&self.search) {
                 Ok(embed) => embed,
                 Err(e) => {
                     let _ = send_kill.send(());
@@ -589,7 +586,7 @@ impl App {
             };
 
             for embedding in &self.images_embedding {
-                let score = cliprs_embed_compare(&text_embeding, embedding.1);
+                let score = self.model.embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -604,7 +601,7 @@ impl App {
             .find(|e| e.option == "Negative Prompt")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = match cliprs_embed_text(self.search.clone()) {
+            let text_embeding = match self.model.embed_text(&self.search) {
                 Ok(embed) => embed,
                 Err(e) => {
                     let _ = send_kill.send(());
@@ -618,7 +615,7 @@ impl App {
             };
 
             for embedding in &self.images_embedding {
-                let score = cliprs_embed_compare(&text_embeding, embedding.1);
+                let score = self.model.embed_compare(&text_embeding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -639,8 +636,8 @@ impl App {
                 let _ = send_kill.send(());
                 return None;
             }
-            let positive_embedding = cliprs_embed_text(search_split[0].to_string());
-            let negative_embedding = cliprs_embed_text(search_split[1].to_string());
+            let positive_embedding = self.model.embed_text(search_split[0]);
+            let negative_embedding = self.model.embed_text(search_split[1]);
 
             if positive_embedding.is_err() && negative_embedding.is_err() {
                 let _ = send_kill.send(());
@@ -656,13 +653,14 @@ impl App {
             let negative_embedding = negative_embedding.unwrap();
 
             for embedding in &self.images_embedding {
-                let score = cliprs_embed_compare(&positive_embedding, embedding.1);
+                let score = self.model.embed_compare(&positive_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
             for embedding in &mut embed_rank {
-                let score =
-                    cliprs_embed_compare(&negative_embedding, &self.images_embedding[&embedding.0]);
+                let score = self
+                    .model
+                    .embed_compare(&negative_embedding, &self.images_embedding[&embedding.0]);
                 embedding.1 -= score;
             }
 
@@ -677,7 +675,7 @@ impl App {
             .find(|e| e.option == "Image 2 Image")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let image_embedding = cliprs_embed_image(self.search.clone());
+            let image_embedding = self.model.embed_image(&self.search);
 
             let real_image_embedding = match image_embedding {
                 Ok(embed) => embed,
@@ -693,7 +691,7 @@ impl App {
             };
 
             for embedding in &self.images_embedding {
-                let score = cliprs_embed_compare(&real_image_embedding, embedding.1);
+                let score = self.model.embed_compare(&real_image_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -772,6 +770,8 @@ struct Embedding {
 
 impl Default for App {
     fn default() -> Self {
+        let clip_model = ClipModel::new(&std::env::args().collect::<Vec<String>>()[1]);
+
         let paths = fs::create_dir_all("images/")
             .and_then(|_| fs::read_dir("images/"))
             .expect("Failed to create or read images directory");
@@ -780,7 +780,10 @@ impl Default for App {
         let mut image_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
 
         for entry in paths.flatten() {
-            images_paths.push(entry.path().display().to_string());
+            let img_path = entry.path().display().to_string();
+            if SUPPORTED_IMAGE_FORMATS.iter().any(|suffix| img_path.ends_with(suffix)) {
+                images_paths.push(img_path);
+            }
         }
 
         let mut index: usize = 0;
@@ -808,7 +811,9 @@ impl Default for App {
                 continue;
             }
 
-            let embedding = cliprs_embed_image(image.clone()).expect("Failed to embed image");
+            let embedding = clip_model
+                .embed_image(image.clone())
+                .expect("Failed to embed image");
             image_embeddings.insert(image.clone(), embedding.clone());
             let to_seralize = Embedding {
                 path: image.clone(),
@@ -825,6 +830,7 @@ impl Default for App {
         }
 
         Self {
+            model: clip_model,
             search: String::new(),
             exit: false,
             input_mode: InputMode::Normal,
