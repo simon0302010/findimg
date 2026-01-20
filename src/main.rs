@@ -1,6 +1,7 @@
 use std::{io::Read, sync::mpsc, time::Duration};
 mod ui;
 use cliprs::{ClipModel, poll_warnings};
+use nano_vectordb_rs::NanoVectorDB;
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
@@ -572,7 +573,7 @@ impl App {
             .find(|e| e.option == "Search")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = match self.model.embed_text(&self.search) {
+            let text_embedding = match self.model.embed_text(&self.search) {
                 Ok(embed) => embed,
                 Err(e) => {
                     let _ = send_kill.send(());
@@ -586,7 +587,7 @@ impl App {
             };
 
             for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&text_embeding, embedding.1);
+                let score = self.model.embed_compare(&text_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -601,7 +602,7 @@ impl App {
             .find(|e| e.option == "Negative Prompt")
             .is_some_and(|e| e.status == OptionStatus::Checked)
         {
-            let text_embeding = match self.model.embed_text(&self.search) {
+            let text_embedding = match self.model.embed_text(&self.search) {
                 Ok(embed) => embed,
                 Err(e) => {
                     let _ = send_kill.send(());
@@ -615,7 +616,7 @@ impl App {
             };
 
             for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&text_embeding, embedding.1);
+                let score = self.model.embed_compare(&text_embedding, embedding.1);
                 embed_rank.push((embedding.0.clone(), score));
             }
 
@@ -777,7 +778,7 @@ impl Default for App {
             .expect("Failed to create or read images directory");
 
         let mut images_paths: Vec<String> = vec![];
-        let mut image_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
+        let mut image_embeddings = NanoVectorDB::new(768, "images/embeddings.db").expect("Failed to initialize database");
 
         for entry in paths.flatten() {
             let img_path = entry.path().display().to_string();
@@ -786,30 +787,9 @@ impl Default for App {
             }
         }
 
-        let mut index: usize = 0;
-        for image in &images_paths {
-            index += 1;
-            if image.ends_with(".embed") {
-                continue;
-            }
-            println!("Embedded {}/{} {}", index, images_paths.len(), image);
-            if fs::exists(image.clone() + ".embed")
-                .unwrap_or_else(|_| panic!("Failed to check if {} exists", image))
-            {
-                let mut output =
-                    File::open(image.clone() + ".embed").expect("Failed to open embed file");
-
-                let mut seralized_buffer = Vec::new();
-                output
-                    .read_to_end(&mut seralized_buffer)
-                    .expect("Failed to read embed file");
-
-                let deserialized: Embedding = serde_json::from_slice(seralized_buffer.as_slice())
-                    .expect("Failed to parse embed file");
-
-                image_embeddings.insert(deserialized.path, deserialized.vector);
-                continue;
-            }
+        for (index, image) in images_paths.iter().enumerate() {
+            println!("Embedding {}/{} {}", index, images_paths.len(), image);
+            if image_embeddings.get()
 
             let embedding = clip_model
                 .embed_image(image.clone())
