@@ -1,7 +1,7 @@
-use std::{io::Read, sync::mpsc, time::Duration};
+use std::{io::Read, result, sync::mpsc, time::Duration, usize};
 mod ui;
-use cliprs::{ClipModel, poll_warnings};
-use nano_vectordb_rs::NanoVectorDB;
+use cliprs::{ClipModel, log_warning, poll_warnings};
+use nano_vectordb_rs::{Data, NanoVectorDB, constants};
 use ratatui_image::{
     ResizeEncodeRender, StatefulImage, picker::Picker, protocol::StatefulProtocol,
 };
@@ -34,7 +34,9 @@ use crate::ui::{
 
 use std::collections::HashMap;
 
-const SUPPORTED_IMAGE_FORMATS: [&str; 10] = ["jpg", "jpeg", "png", "tga", "bmp", "psd"," gif", "hdr", "pic", "ppm"];
+const SUPPORTED_IMAGE_FORMATS: [&str; 10] = [
+    "jpg", "jpeg", "png", "tga", "bmp", "psd", " gif", "hdr", "pic", "ppm",
+];
 
 pub struct App {
     model: ClipModel,
@@ -48,7 +50,7 @@ pub struct App {
     modesel_list: OptionList,
     mode: SearchEnum,
     search_results: Vec<SearchResult>,
-    images_embedding: HashMap<String, Vec<f32>>,
+    images_embeddings: NanoVectorDB,
     picker: Picker,
     search_area: Rect,
     clear_terminal: bool,
@@ -586,15 +588,24 @@ impl App {
                 }
             };
 
-            for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&text_embedding, embedding.1);
-                embed_rank.push((embedding.0.clone(), score));
+            let results =
+                self.images_embeddings
+                    .query(&text_embedding, SEARCH_RESULTS, None, None);
+
+            for result in results {
+                embed_rank.push((
+                    result[constants::F_ID]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    result[constants::F_METRICS].as_f64().unwrap_or_default() as f32,
+                ));
             }
 
-            embed_rank.sort_by(|a, b| {
+            /*embed_rank.sort_by(|a, b| {
                 b.1.partial_cmp(&a.1)
                     .expect("Failed to sort search results")
-            });
+            });*/
         } else if self
             .modesel_list
             .items
@@ -615,15 +626,26 @@ impl App {
                 }
             };
 
-            for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&text_embedding, embedding.1);
-                embed_rank.push((embedding.0.clone(), score));
+            let results =
+                self.images_embeddings
+                    .query(&text_embedding, usize::MAX, None, None);
+
+            for result in results {
+                embed_rank.push((
+                    result[constants::F_ID]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    result[constants::F_METRICS].as_f64().unwrap_or_default() as f32,
+                ));
             }
 
-            embed_rank.sort_by(|a, b| {
+            embed_rank.reverse();
+
+            /*embed_rank.sort_by(|a, b| {
                 a.1.partial_cmp(&b.1)
                     .expect("Failed to sort search results")
-            });
+            });*/
         } else if self
             .modesel_list
             .items
@@ -653,22 +675,41 @@ impl App {
             let positive_embedding = positive_embedding.unwrap();
             let negative_embedding = negative_embedding.unwrap();
 
-            for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&positive_embedding, embedding.1);
-                embed_rank.push((embedding.0.clone(), score));
-            }
+            let results =
+                self.images_embeddings
+                    .query(&positive_embedding, SEARCH_RESULTS, None, None);
 
-            for embedding in &mut embed_rank {
-                let score = self
-                    .model
-                    .embed_compare(&negative_embedding, &self.images_embedding[&embedding.0]);
-                embedding.1 -= score;
+            for result in results {
+                let file_id = result[constants::F_ID]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let positive_score =
+                    result[constants::F_METRICS].as_f64().unwrap_or_default() as f32;
+
+                let negative_results =
+                    self.images_embeddings
+                        .query(&negative_embedding, 1, None, None);
+
+                let negative_score = negative_results
+                    .first()
+                    .and_then(|result| result[constants::F_METRICS].as_f64())
+                    .unwrap_or_default() as f32;
+
+                let combined_score = positive_score - negative_score;
+
+                embed_rank.push((file_id, combined_score));
             }
 
             embed_rank.sort_by(|a, b| {
                 b.1.partial_cmp(&a.1)
                     .expect("Failed to sort search results")
             });
+
+            /*embed_rank.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .expect("Failed to sort search results")
+            });*/
         } else if self
             .modesel_list
             .items
@@ -691,15 +732,24 @@ impl App {
                 }
             };
 
-            for embedding in &self.images_embedding {
-                let score = self.model.embed_compare(&real_image_embedding, embedding.1);
-                embed_rank.push((embedding.0.clone(), score));
+            let results =
+                self.images_embeddings
+                    .query(&real_image_embedding, SEARCH_RESULTS, None, None);
+
+            for result in results {
+                embed_rank.push((
+                    result[constants::F_ID]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    result[constants::F_METRICS].as_f64().unwrap_or_default() as f32,
+                ));
             }
 
-            embed_rank.sort_by(|a, b| {
+            /*embed_rank.sort_by(|a, b| {
                 b.1.partial_cmp(&a.1)
                     .expect("Failed to sort search results")
-            });
+            });*/
         }
 
         let mut results: Vec<SearchResult> = Vec::new();
@@ -778,35 +828,38 @@ impl Default for App {
             .expect("Failed to create or read images directory");
 
         let mut images_paths: Vec<String> = vec![];
-        let mut image_embeddings = NanoVectorDB::new(768, "images/embeddings.db").expect("Failed to initialize database");
+        let mut image_embeddings =
+            NanoVectorDB::new(768, "images/embeddings.db").expect("Failed to initialize database");
 
         for entry in paths.flatten() {
             let img_path = entry.path().display().to_string();
-            if SUPPORTED_IMAGE_FORMATS.iter().any(|suffix| img_path.ends_with(suffix)) {
+            if SUPPORTED_IMAGE_FORMATS
+                .iter()
+                .any(|suffix| img_path.ends_with(suffix))
+            {
                 images_paths.push(img_path);
             }
         }
 
         for (index, image) in images_paths.iter().enumerate() {
             println!("Embedding {}/{} {}", index, images_paths.len(), image);
-            if image_embeddings.get()
+            if !image_embeddings.get(&[image.clone()]).is_empty() {
+                continue;
+            }
 
             let embedding = clip_model
                 .embed_image(image.clone())
                 .expect("Failed to embed image");
-            image_embeddings.insert(image.clone(), embedding.clone());
-            let to_seralize = Embedding {
-                path: image.clone(),
+
+            image_embeddings.upsert(vec![Data {
+                id: image.clone(),
                 vector: embedding,
-            };
+                fields: HashMap::new(),
+            }]);
 
-            let buffer = serde_json::to_string(&to_seralize).expect("Failed to parse buffer");
-
-            let mut output =
-                File::create(image.clone() + ".embed").expect("Failed to create embed file");
-            output
-                .write_all(buffer.as_bytes())
-                .expect("Failed to write embed file");
+            image_embeddings.save().unwrap_or_else(|_| {
+                log_warning("Failed to save database to disk".into());
+            })
         }
 
         Self {
@@ -834,7 +887,7 @@ impl Default for App {
                 ),
             ]),
             search_results: Vec::new(),
-            images_embedding: image_embeddings,
+            images_embeddings: image_embeddings,
             picker: Picker::from_query_stdio().unwrap_or(Picker::halfblocks()),
             search_area: Rect::default(),
             clear_terminal: false,
